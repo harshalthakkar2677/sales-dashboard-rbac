@@ -9,6 +9,8 @@ import plotly.express as px
 # -----------------------------
 users_df = pd.read_excel("Access Master.xlsx")
 
+st.image("company_logo.png", width=200)
+st.markdown("### Welcome to the Sales & Installation Dashboard")
 # -----------------------------
 # 2. Login Form
 # -----------------------------
