@@ -2,6 +2,8 @@ streamlit
 pandas
 openpyxl
 altair
+plotly
+
 
 
 
