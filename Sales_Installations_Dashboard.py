@@ -61,7 +61,7 @@ with col1:
         st.image(logo_path, width=120)
 with col2:
     st.title("Sales & Installations Dashboard")
-    st.markdown("#### CEO & Sales Team View")
+    st.markdown("#### Created By - Harshal Thakkar")
 
 # --------------------------------------------------
 # Refresh Control
