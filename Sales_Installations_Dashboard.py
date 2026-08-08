@@ -49,12 +49,7 @@ def validate_required_files():
         st.stop()
         
 validate_required_files()
-
-with st.expander("Deployment Debug Info"):
-    st.write("Current working directory:", os.getcwd())
-    st.write("Files in current directory:")
-    st.code("\n".join(os.listdir(".")))
-    
+  
 # --------------------------------------------------
 # Header
 # --------------------------------------------------
