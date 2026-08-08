@@ -1,7 +1,5 @@
-import os   
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
 # --- Logo and Header ---
 st.image("company_logo.png", width=200)
@@ -15,53 +13,9 @@ access_master = pd.read_excel("Access Master.xlsx")
 username = st.text_input("Username")
 password = st.text_input("Password", type="password")
 
-if st.button("Login"):
-    # Check if user exists in Access Master
-    user_row = access_master[
-        (access_master["Username"] == username) &
-        (access_master["Password"] == password)
-    ]
-
-    if not user_row.empty:
-        role = user_row["Role"].values[0]
-        region = user_row["Region/City"].values[0]
-
-        # --- Load Dashboard Data ---
-        DATA_FILE = "New Registration Report.csv"
-        WINBACK_FILE = "New Winback Report.csv"
-        df = pd.read_csv(DATA_FILE)
-        wb = pd.read_csv(WINBACK_FILE)
-
-        # --- Role-based Dashboards ---
-        if role == "Manager":
-            st.header("📊 Manager Dashboard - All Cities")
-            st.dataframe(df)
-
-        elif role == "Regional Lead":
-            # Split comma-separated cities into a list
-            allowed_cities = [city.strip() for city in region.split(",")]
-            st.header(f"🌍 Regional Dashboard - {', '.join(allowed_cities)}")
-            st.write("Access limited to city-level performance and SLA metrics.")
-
-            regional_df = df[df['City'].isin(allowed_cities)]
-            st.dataframe(regional_df)
-
-            regional_wb = wb[wb['City'].isin(allowed_cities)]
-            st.dataframe(regional_wb)
-
-        elif role == "CEO":
-            st.header("🏢 Sales & Installations Dashboard - CEO & Sales Team View")
-            st.dataframe(df)
-            st.dataframe(wb)
-
-        else:
-            st.warning("Role not recognized.")
-
-    else:
-        st.error("Invalid username or password")
-
-    # --------------------------------------------------
+def render_dashboard(df, wb):
     # Page Config
+    # --------------------------------------------------
     # --------------------------------------------------
     st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
 
@@ -1331,3 +1285,42 @@ if st.button("Login"):
         else "N/A"
     )
     st.caption(f"Latest month available in data: {latest_month}")
+
+
+if st.button("Login"):
+    user_row = access_master[
+        (access_master["Username"] == username) &
+        (access_master["Password"] == password)
+    ]
+
+    if not user_row.empty:
+        role = user_row["Role"].values[0]
+        region = user_row["Region/City"].values[0]
+
+        # --- Load Dashboard Data ---
+        DATA_FILE = "New Registration Report.csv"
+        WINBACK_FILE = "New Winback Report.csv"
+        df = pd.read_csv(DATA_FILE)
+        wb = pd.read_csv(WINBACK_FILE)
+
+        # --- Apply role-based filters ---
+        if role == "Regional Lead":
+            allowed_cities = [city.strip() for city in region.split(",")]
+            df = df[df['City'].isin(allowed_cities)]
+            wb = wb[wb['City'].isin(allowed_cities)]
+            st.header(f"🌍 Regional Dashboard - {', '.join(allowed_cities)}")
+            st.write("Access limited to city-level performance and SLA metrics.")
+
+        elif role == "Manager":
+            st.header("📊 Manager Dashboard - All Cities")
+
+        elif role == "CEO":
+            st.header("🏢 Sales & Installations Dashboard - CEO & Sales Team View")
+
+        # --- Render the actual dashboard ---
+        render_dashboard(df, wb)
+
+    else:
+        st.error("Invalid username or password")
+
+
