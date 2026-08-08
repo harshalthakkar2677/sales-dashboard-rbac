@@ -348,17 +348,30 @@ def load_data(file_mtime):
         sort_col = "INSTALLATION DATE" if "INSTALLATION DATE" in df.columns else "CREATION DATE"
 
         emp_master = (
-            df.sort_values(sort_col)
-              .dropna(subset=["SALES CODE"])
-              .groupby("SALES CODE", as_index=False)
-              .last()[["SALES CODE", "SALES EXEC NAME", "EXEC_STATUS_CLEAN", "DEPARTMENT_CLEAN", "SALES EXEC DOJ"]]
-              .rename(columns={
-                  "SALES EXEC NAME": "EXEC_NAME_MASTER",
-                  "EXEC_STATUS_CLEAN": "EXEC_STATUS_MASTER",
-                  "DEPARTMENT_CLEAN": "DEPARTMENT_MASTER",
-                  "SALES EXEC DOJ": "DOJ_MASTER"
-              })
-        )
+        df.sort_values(sort_col)
+          .dropna(subset=["SALES CODE"])
+          .groupby("SALES CODE", as_index=False)
+          .last()[["SALES CODE", "SALES EXEC NAME", "EXEC_STATUS_CLEAN", "DEPARTMENT_CLEAN", "SALES EXEC DOJ"]]
+          .rename(columns={
+              "SALES EXEC NAME": "EXEC_NAME_MASTER",
+              "EXEC_STATUS_CLEAN": "EXEC_STATUS_MASTER",
+              "DEPARTMENT_CLEAN": "DEPARTMENT_MASTER",
+              "SALES EXEC DOJ": "DOJ_MASTER"
+          })
+    )
+
+    exec_city_master = (
+        df.dropna(subset=["SALES CODE", "City"])
+          .groupby(["SALES CODE", "City"])
+          .size()
+          .reset_index(name="Freq")
+          .sort_values(["SALES CODE", "Freq"], ascending=[True, False])
+          .drop_duplicates(subset=["SALES CODE"])[["SALES CODE", "City"]]
+          .rename(columns={"City": "EXEC_CITY_MASTER"})
+    )
+
+    emp_master = emp_master.merge(exec_city_master, on="SALES CODE", how="left")
+
 
         df = df.drop(columns=[c for c in ["EXEC_NAME_MASTER", "EXEC_STATUS_MASTER", "DEPARTMENT_MASTER", "DOJ_MASTER"] if c in df.columns], errors="ignore")
         df = df.merge(emp_master, on="SALES CODE", how="left")
@@ -367,17 +380,18 @@ def load_data(file_mtime):
         df["EXEC_STATUS_FINAL"] = df["EXEC_STATUS_MASTER"].fillna(df["EXEC_STATUS_CLEAN"])
         df["DEPARTMENT_FINAL"] = df["DEPARTMENT_MASTER"].fillna(df["DEPARTMENT_CLEAN"])
         df["SALES EXEC DOJ FINAL"] = df["DOJ_MASTER"]
+        df["EXEC_CITY_FINAL"] = df["EXEC_CITY_MASTER"].fillna(df["City"] if "City" in df.columns else "Unknown")
     else:
         df["EXEC_NAME_FINAL"] = df["SALES EXEC NAME"]
         df["EXEC_STATUS_FINAL"] = df["EXEC_STATUS_CLEAN"]
         df["DEPARTMENT_FINAL"] = df["DEPARTMENT_CLEAN"]
-        df["SALES EXEC DOJ FINAL"] = df["SALES EXEC DOJ"]
+        df["EXEC_CITY_FINAL"] = df["City"] if "City" in df.columns else "Unknown"
 
     today = pd.Timestamp.today().normalize()
     df["Exec_Ageing_Months"] = ((today - df["SALES EXEC DOJ FINAL"]).dt.days / 30.44).round(1)
     df["Exec_Ageing_Bucket"] = df["Exec_Ageing_Months"].apply(ageing_bucket)
     df["Target_Avg_Month"] = df["Exec_Ageing_Bucket"].apply(target_by_ageing)
-
+    
     # -----------------------------
     # Load Winback Data
     # -----------------------------
@@ -448,11 +462,14 @@ def load_data(file_mtime):
             wb["EXEC_STATUS_FINAL"] = wb["EXEC_STATUS_MASTER"].fillna(wb["EXEC_STATUS_CLEAN"])
             wb["DEPARTMENT_FINAL"] = wb["DEPARTMENT_MASTER"].fillna(wb["DEPARTMENT_CLEAN"])
             wb["SALES EXEC DOJ FINAL"] = wb["DOJ_MASTER"]
+            wb["EXEC_CITY_FINAL"] = wb["EXEC_CITY_MASTER"].fillna(wb["City"] if "City" in wb.columns else "Unknown")
         else:
             wb["EXEC_NAME_FINAL"] = wb["SALES EXEC NAME"]
             wb["EXEC_STATUS_FINAL"] = wb["EXEC_STATUS_CLEAN"]
             wb["DEPARTMENT_FINAL"] = wb["DEPARTMENT_CLEAN"]
             wb["SALES EXEC DOJ FINAL"] = wb["SALES EXEC DOJ"]
+            wb["EXEC_CITY_FINAL"] = wb["City"] if "City" in wb.columns else "Unknown"
+
 
         wb["Exec_Ageing_Months"] = ((today - wb["SALES EXEC DOJ FINAL"]).dt.days / 30.44).round(1)
         wb["Exec_Ageing_Bucket"] = wb["Exec_Ageing_Months"].apply(ageing_bucket)
@@ -470,7 +487,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 df, wb = load_data(file_mtime)
-
+st.write(df[["SALES CODE", "SALES EXEC NAME", "City", "EXEC_CITY_FINAL"]].drop_duplicates().head(20))
 # --------------------------------------------------
 # Contribution Mode Filter
 # --------------------------------------------------
@@ -1426,7 +1443,7 @@ with tab4:
 
     exec_action = (
         exec_summary.groupby(
-            ["EXEC_NAME_FINAL", "City", "EXEC_STATUS_FINAL", "Exec_Ageing_Bucket", "Target_Avg_Month"],
+            ["EXEC_NAME_FINAL", "EXEC_CITY_FINAL", "EXEC_STATUS_FINAL", "Exec_Ageing_Bucket", "Target_Avg_Month"],
             dropna=False
         )
         .agg(
@@ -1460,7 +1477,7 @@ with tab4:
     exec_action["Action Flag"] = exec_action.apply(action_flag, axis=1)
 
     exec_action = exec_action.rename(columns={
-        "EXEC_NAME_FINAL": "Exec Name",
+        "EXEC_NAME_FINAL": "Exec City",
         "EXEC_STATUS_FINAL": "Status",
         "Exec_Ageing_Bucket": "Ageing Bucket",
         "Target_Avg_Month": "Target Avg/Month"
@@ -1558,7 +1575,7 @@ with tab4:
 
     if "INSTALLATION NODE" in node_df.columns:
         node_summary = (
-            node_df.groupby(["City", "INSTALLATION NODE"], dropna=False)
+            node_df.groupby(["EXEC_CITY_FINAL", "INSTALLATION NODE"], dropna=False)
             .agg(
                 Installation=("Installation", "sum"),
                 Winback=("Winback", "sum"),
@@ -1637,7 +1654,7 @@ with tab4:
         st.dataframe(
             alerts[
                 [
-                    "Exec Name", "City", "Status", "Ageing Bucket",
+                    "Exec Name", "EXEC_CITY_FINAL", "Status", "Ageing Bucket",
                     "Installation", "Winback", "Total",
                     "Avg/Month Count", "Target Avg/Month",
                     "Target Gap", "Avg Plan Value/Sale",
