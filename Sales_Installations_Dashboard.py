@@ -43,8 +43,8 @@ if not st.session_state.authenticated:
 # --- Dashboard Phase ---
 if st.session_state.authenticated:
     # Load your data
-    DATA_FILE = "New Registration Report.csv"
-    WINBACK_FILE = "New Winback Report.csv"
+    DATA_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Registration Report.csv"
+    WINBACK_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Winback Report.csv"
     df = pd.read_csv(DATA_FILE)
     wb = pd.read_csv(WINBACK_FILE)
     
