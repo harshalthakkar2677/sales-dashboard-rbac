@@ -348,32 +348,43 @@ def load_data(file_mtime):
         sort_col = "INSTALLATION DATE" if "INSTALLATION DATE" in df.columns else "CREATION DATE"
 
         emp_master = (
-        df.sort_values(sort_col)
-          .dropna(subset=["SALES CODE"])
-          .groupby("SALES CODE", as_index=False)
-          .last()[["SALES CODE", "SALES EXEC NAME", "EXEC_STATUS_CLEAN", "DEPARTMENT_CLEAN", "SALES EXEC DOJ"]]
-          .rename(columns={
-              "SALES EXEC NAME": "EXEC_NAME_MASTER",
-              "EXEC_STATUS_CLEAN": "EXEC_STATUS_MASTER",
-              "DEPARTMENT_CLEAN": "DEPARTMENT_MASTER",
-              "SALES EXEC DOJ": "DOJ_MASTER"
-          })
-    )
+            df.sort_values(sort_col)
+              .dropna(subset=["SALES CODE"])
+              .groupby("SALES CODE", as_index=False)
+              .last()[["SALES CODE", "SALES EXEC NAME", "EXEC_STATUS_CLEAN", "DEPARTMENT_CLEAN", "SALES EXEC DOJ"]]
+              .rename(columns={
+                  "SALES EXEC NAME": "EXEC_NAME_MASTER",
+                  "EXEC_STATUS_CLEAN": "EXEC_STATUS_MASTER",
+                  "DEPARTMENT_CLEAN": "DEPARTMENT_MASTER",
+                  "SALES EXEC DOJ": "DOJ_MASTER"
+              })
+        )
 
-    exec_city_master = (
-        df.dropna(subset=["SALES CODE", "City"])
-          .groupby(["SALES CODE", "City"])
-          .size()
-          .reset_index(name="Freq")
-          .sort_values(["SALES CODE", "Freq"], ascending=[True, False])
-          .drop_duplicates(subset=["SALES CODE"])[["SALES CODE", "City"]]
-          .rename(columns={"City": "EXEC_CITY_MASTER"})
-    )
+        exec_city_master = (
+            df.dropna(subset=["SALES CODE", "City"])
+              .groupby(["SALES CODE", "City"])
+              .size()
+              .reset_index(name="Freq")
+              .sort_values(["SALES CODE", "Freq"], ascending=[True, False])
+              .drop_duplicates(subset=["SALES CODE"])[["SALES CODE", "City"]]
+              .rename(columns={"City": "EXEC_CITY_MASTER"})
+        )
 
-    emp_master = emp_master.merge(exec_city_master, on="SALES CODE", how="left")
+        emp_master = emp_master.merge(exec_city_master, on="SALES CODE", how="left")
 
+        df = df.drop(
+            columns=[
+                c for c in [
+                    "EXEC_NAME_MASTER",
+                    "EXEC_STATUS_MASTER",
+                    "DEPARTMENT_MASTER",
+                    "DOJ_MASTER",
+                    "EXEC_CITY_MASTER"
+                ] if c in df.columns
+            ],
+            errors="ignore"
+        )
 
-        df = df.drop(columns=[c for c in ["EXEC_NAME_MASTER", "EXEC_STATUS_MASTER", "DEPARTMENT_MASTER", "DOJ_MASTER"] if c in df.columns], errors="ignore")
         df = df.merge(emp_master, on="SALES CODE", how="left")
 
         df["EXEC_NAME_FINAL"] = df["EXEC_NAME_MASTER"].fillna(df["SALES EXEC NAME"])
@@ -381,13 +392,14 @@ def load_data(file_mtime):
         df["DEPARTMENT_FINAL"] = df["DEPARTMENT_MASTER"].fillna(df["DEPARTMENT_CLEAN"])
         df["SALES EXEC DOJ FINAL"] = df["DOJ_MASTER"]
         df["EXEC_CITY_FINAL"] = df["EXEC_CITY_MASTER"].fillna(df["City"] if "City" in df.columns else "Unknown")
+
     else:
         df["EXEC_NAME_FINAL"] = df["SALES EXEC NAME"]
         df["EXEC_STATUS_FINAL"] = df["EXEC_STATUS_CLEAN"]
         df["DEPARTMENT_FINAL"] = df["DEPARTMENT_CLEAN"]
+        df["SALES EXEC DOJ FINAL"] = df["SALES EXEC DOJ"]
         df["EXEC_CITY_FINAL"] = df["City"] if "City" in df.columns else "Unknown"
 
-    today = pd.Timestamp.today().normalize()
     df["Exec_Ageing_Months"] = ((today - df["SALES EXEC DOJ FINAL"]).dt.days / 30.44).round(1)
     df["Exec_Ageing_Bucket"] = df["Exec_Ageing_Months"].apply(ageing_bucket)
     df["Target_Avg_Month"] = df["Exec_Ageing_Bucket"].apply(target_by_ageing)
@@ -1432,246 +1444,326 @@ with tab4:
 
     period_months = filtered_df_base["MonthYear"].nunique() if "MonthYear" in filtered_df_base.columns else 0
 
-    # ------------------------------------------
-    # Executive Action Summary
-    # ------------------------------------------
-    st.subheader(f"Executive Action Summary ({period_months} Months)")
+    # --------------------------------------------------
+    # Actionable scope = only Active Sales employees
+    # --------------------------------------------------
+    action_df = filtered_df_base.copy()
 
-    exec_summary = filtered_df_base.copy()
-    exec_summary["Installation"] = (exec_summary["Record_Type"] == "Installation").astype(int)
-    exec_summary["Winback"] = (exec_summary["Record_Type"] == "Winback").astype(int)
+    if "DEPARTMENT_FINAL" in action_df.columns:
+        action_df = action_df[action_df["DEPARTMENT_FINAL"] == "Sales"]
 
-    exec_action = (
-        exec_summary.groupby(
-            ["EXEC_NAME_FINAL", "EXEC_CITY_FINAL", "EXEC_STATUS_FINAL", "Exec_Ageing_Bucket", "Target_Avg_Month"],
-            dropna=False
-        )
-        .agg(
-            Installation=("Installation", "sum"),
-            Winback=("Winback", "sum"),
-            Total=("ACCOUNT NO", "count"),
-            Value=("Plan Value", "sum"),
-            Months=("MonthYear", "nunique")
-        )
-        .reset_index()
-    )
+    if "EXEC_STATUS_FINAL" in action_df.columns:
+        action_df = action_df[action_df["EXEC_STATUS_FINAL"] == "Active"]
 
-    exec_action["Avg/Month Count"] = (exec_action["Total"] / exec_action["Months"]).round(1)
-    exec_action["Avg/Month Value"] = (exec_action["Value"] / exec_action["Months"]).round(0)
-    exec_action["Avg Plan Value/Sale"] = (exec_action["Value"] / exec_action["Total"]).round(0)
-    exec_action["Expectation Status"] = exec_action.apply(
-        lambda row: expectation_label(row["Avg/Month Count"], row["Target_Avg_Month"]),
-        axis=1
-    )
-    exec_action["Target Gap"] = (exec_action["Avg/Month Count"] - exec_action["Target_Avg_Month"]).round(1)
+    if action_df.empty:
+        st.warning("No Active Sales employee data available for the selected filters.")
+    else:
+        action_df["Installation"] = (action_df["Record_Type"] == "Installation").astype(int)
+        action_df["Winback"] = (action_df["Record_Type"] == "Winback").astype(int)
 
-    def action_flag(row):
-        if row["Expectation Status"] == "Below Expectations":
-            return "Intervention Needed"
-        elif row["Expectation Status"] == "Meeting Expectations":
-            return "On Track"
-        elif row["Expectation Status"] == "Exceptional":
-            return "Scale Best Practice"
-        return "Review"
+        # ==================================================
+        # 1. Executive Action Summary
+        # ==================================================
+        st.subheader(f"Executive Action Summary ({period_months} Months)")
 
-    exec_action["Action Flag"] = exec_action.apply(action_flag, axis=1)
-
-    exec_action = exec_action.rename(columns={
-        "EXEC_NAME_FINAL": "Exec City",
-        "EXEC_STATUS_FINAL": "Status",
-        "Exec_Ageing_Bucket": "Ageing Bucket",
-        "Target_Avg_Month": "Target Avg/Month"
-    })
-
-    st.dataframe(
-        exec_action.sort_values(["Expectation Status", "Target Gap", "Total"], ascending=[True, True, False]),
-        use_container_width=True
-    )
-
-    # ------------------------------------------
-    # Executive Expectation Summary
-    # ------------------------------------------
-    st.subheader(f"Expectation Summary by Ageing Bucket ({period_months} Months)")
-
-    ageing_summary = (
-        exec_action.groupby(["Ageing Bucket", "Expectation Status"])
-        .agg(Employee_Count=("Exec Name", "nunique"))
-        .reset_index()
-    )
-
-    total_emp_by_bucket = (
-        exec_action.groupby("Ageing Bucket")
-        .agg(Total_Employees=("Exec Name", "nunique"))
-        .reset_index()
-    )
-
-    ageing_summary = ageing_summary.merge(total_emp_by_bucket, on="Ageing Bucket", how="left")
-    ageing_summary["Percent Contribution"] = (
-        ageing_summary["Employee_Count"] / ageing_summary["Total_Employees"] * 100
-    ).round(1)
-
-    ageing_pivot = ageing_summary.pivot_table(
-        index="Ageing Bucket",
-        columns="Expectation Status",
-        values="Employee_Count",
-        fill_value=0
-    ).reset_index()
-
-    for col in ["Below Expectations", "Meeting Expectations", "Exceptional", "Missing"]:
-        if col not in ageing_pivot.columns:
-            ageing_pivot[col] = 0
-
-    ageing_pivot = ageing_pivot.merge(total_emp_by_bucket, on="Ageing Bucket", how="left")
-
-    ageing_pct = ageing_summary.pivot_table(
-        index="Ageing Bucket",
-        columns="Expectation Status",
-        values="Percent Contribution",
-        fill_value=0
-    ).reset_index()
-
-    for col in ["Below Expectations", "Meeting Expectations", "Exceptional", "Missing"]:
-        if col not in ageing_pct.columns:
-            ageing_pct[col] = 0
-
-    ageing_pct = ageing_pct.rename(columns={
-        "Below Expectations": "Below %",
-        "Meeting Expectations": "Meeting %",
-        "Exceptional": "Exceptional %",
-        "Missing": "Missing %"
-    })
-
-    ageing_pivot = ageing_pivot.merge(ageing_pct, on="Ageing Bucket", how="left")
-
-    total_row = pd.DataFrame({
-        "Ageing Bucket": ["Total"],
-        "Below Expectations": [ageing_pivot["Below Expectations"].sum()],
-        "Meeting Expectations": [ageing_pivot["Meeting Expectations"].sum()],
-        "Exceptional": [ageing_pivot["Exceptional"].sum()],
-        "Missing": [ageing_pivot["Missing"].sum()],
-        "Total_Employees": [ageing_pivot["Total_Employees"].sum()],
-        "Below %": [round(ageing_pivot["Below Expectations"].sum() / ageing_pivot["Total_Employees"].sum() * 100, 1) if ageing_pivot["Total_Employees"].sum() > 0 else 0],
-        "Meeting %": [round(ageing_pivot["Meeting Expectations"].sum() / ageing_pivot["Total_Employees"].sum() * 100, 1) if ageing_pivot["Total_Employees"].sum() > 0 else 0],
-        "Exceptional %": [round(ageing_pivot["Exceptional"].sum() / ageing_pivot["Total_Employees"].sum() * 100, 1) if ageing_pivot["Total_Employees"].sum() > 0 else 0],
-        "Missing %": [round(ageing_pivot["Missing"].sum() / ageing_pivot["Total_Employees"].sum() * 100, 1) if ageing_pivot["Total_Employees"].sum() > 0 else 0]
-    })
-
-    ageing_pivot = pd.concat([ageing_pivot, total_row], ignore_index=True)
-
-    ageing_order = ["Less Than 3 Months", "4-12 Months", "Above 12 Months", "Missing", "Total"]
-    ageing_pivot["Ageing Bucket"] = pd.Categorical(ageing_pivot["Ageing Bucket"], categories=ageing_order, ordered=True)
-    ageing_pivot = ageing_pivot.sort_values("Ageing Bucket")
-
-    st.dataframe(ageing_pivot, use_container_width=True)
-
-    # ------------------------------------------
-    # Node Performance Summary
-    # ------------------------------------------
-    st.subheader(f"Node Performance Summary ({period_months} Months)")
-
-    node_df = filtered_df_base.copy()
-    node_df["Installation"] = (node_df["Record_Type"] == "Installation").astype(int)
-    node_df["Winback"] = (node_df["Record_Type"] == "Winback").astype(int)
-
-    if "INSTALLATION NODE" in node_df.columns:
-        node_summary = (
-            node_df.groupby(["EXEC_CITY_FINAL", "INSTALLATION NODE"], dropna=False)
+        exec_action = (
+            action_df.groupby(
+                ["EXEC_NAME_FINAL", "EXEC_CITY_FINAL", "EXEC_STATUS_FINAL", "Exec_Ageing_Bucket", "Target_Avg_Month"],
+                dropna=False
+            )
             .agg(
                 Installation=("Installation", "sum"),
                 Winback=("Winback", "sum"),
                 Total=("ACCOUNT NO", "count"),
+                Value=("Plan Value", "sum"),
+                Months=("MonthYear", "nunique")
+            )
+            .reset_index()
+        )
+
+        exec_action["Avg/Month Count"] = (exec_action["Total"] / exec_action["Months"]).round(1)
+        exec_action["Avg/Month Value"] = (exec_action["Value"] / exec_action["Months"]).round(0)
+        exec_action["Avg Plan Value/Sale"] = (exec_action["Value"] / exec_action["Total"]).round(0)
+
+        exec_action["Expectation Status"] = exec_action.apply(
+            lambda row: expectation_label(row["Avg/Month Count"], row["Target_Avg_Month"]),
+            axis=1
+        )
+        exec_action["Target Gap"] = (exec_action["Avg/Month Count"] - exec_action["Target_Avg_Month"]).round(1)
+
+        def action_flag(row):
+            if row["Expectation Status"] == "Below Expectations":
+                return "Intervention Needed"
+            elif row["Expectation Status"] == "Meeting Expectations":
+                return "On Track"
+            elif row["Expectation Status"] == "Exceptional":
+                return "Scale Best Practice"
+            return "Review"
+
+        exec_action["Action Flag"] = exec_action.apply(action_flag, axis=1)
+
+        exec_action = exec_action.rename(columns={
+            "EXEC_NAME_FINAL": "Exec Name",
+            "EXEC_CITY_FINAL": "Exec City",
+            "EXEC_STATUS_FINAL": "Status",
+            "Exec_Ageing_Bucket": "Ageing Bucket",
+            "Target_Avg_Month": "Target Avg/Month"
+        })
+
+        total_execs = exec_action["Exec Name"].nunique()
+        below_execs = exec_action[exec_action["Expectation Status"] == "Below Expectations"]["Exec Name"].nunique()
+        meeting_execs = exec_action[exec_action["Expectation Status"] == "Meeting Expectations"]["Exec Name"].nunique()
+        exceptional_execs = exec_action[exec_action["Expectation Status"] == "Exceptional"]["Exec Name"].nunique()
+
+        top_below_bucket = (
+            exec_action[exec_action["Expectation Status"] == "Below Expectations"]["Ageing Bucket"]
+            .value_counts().idxmax()
+            if below_execs > 0 else "None"
+        )
+
+        top_below_city = (
+            exec_action[exec_action["Expectation Status"] == "Below Expectations"]["Exec City"]
+            .value_counts().idxmax()
+            if below_execs > 0 else "None"
+        )
+
+        st.info(
+            f"""
+            **Leadership Narrative:**  
+            In the selected scope, there are **{total_execs} active Sales executives** over **{period_months} months**.  
+            **{below_execs}** are below expectations, **{meeting_execs}** are on track, and **{exceptional_execs}** are exceptional.  
+            The highest concentration of underperformance is in **{top_below_bucket}** bucket and most visible in **{top_below_city}** executive city.
+            """
+        )
+
+        st.dataframe(
+            exec_action.sort_values(["Expectation Status", "Target Gap", "Total"], ascending=[True, True, False]),
+            use_container_width=True
+        )
+
+        # ==================================================
+        # 2. Executive Expectation Summary by Ageing
+        # ==================================================
+        st.subheader(f"Expectation Summary by Ageing Bucket ({period_months} Months)")
+
+        ageing_summary = (
+            exec_action.groupby(["Ageing Bucket", "Expectation Status"])
+            .agg(Employee_Count=("Exec Name", "nunique"))
+            .reset_index()
+        )
+
+        total_emp_by_bucket = (
+            exec_action.groupby("Ageing Bucket")
+            .agg(Total_Employees=("Exec Name", "nunique"))
+            .reset_index()
+        )
+
+        ageing_summary = ageing_summary.merge(total_emp_by_bucket, on="Ageing Bucket", how="left")
+        ageing_summary["Percent Contribution"] = (
+            ageing_summary["Employee_Count"] / ageing_summary["Total_Employees"] * 100
+        ).round(1)
+
+        ageing_pivot = ageing_summary.pivot_table(
+            index="Ageing Bucket",
+            columns="Expectation Status",
+            values="Employee_Count",
+            fill_value=0
+        ).reset_index()
+
+        for col in ["Below Expectations", "Meeting Expectations", "Exceptional", "Missing"]:
+            if col not in ageing_pivot.columns:
+                ageing_pivot[col] = 0
+
+        ageing_pivot = ageing_pivot.merge(total_emp_by_bucket, on="Ageing Bucket", how="left")
+
+        ageing_pct = ageing_summary.pivot_table(
+            index="Ageing Bucket",
+            columns="Expectation Status",
+            values="Percent Contribution",
+            fill_value=0
+        ).reset_index()
+
+        for col in ["Below Expectations", "Meeting Expectations", "Exceptional", "Missing"]:
+            if col not in ageing_pct.columns:
+                ageing_pct[col] = 0
+
+        ageing_pct = ageing_pct.rename(columns={
+            "Below Expectations": "Below %",
+            "Meeting Expectations": "Meeting %",
+            "Exceptional": "Exceptional %",
+            "Missing": "Missing %"
+        })
+
+        ageing_pivot = ageing_pivot.merge(ageing_pct, on="Ageing Bucket", how="left")
+
+        total_row = pd.DataFrame({
+            "Ageing Bucket": ["Total"],
+            "Below Expectations": [ageing_pivot["Below Expectations"].sum()],
+            "Meeting Expectations": [ageing_pivot["Meeting Expectations"].sum()],
+            "Exceptional": [ageing_pivot["Exceptional"].sum()],
+            "Missing": [ageing_pivot["Missing"].sum()],
+            "Total_Employees": [ageing_pivot["Total_Employees"].sum()],
+            "Below %": [round(ageing_pivot["Below Expectations"].sum() / ageing_pivot["Total_Employees"].sum() * 100, 1) if ageing_pivot["Total_Employees"].sum() > 0 else 0],
+            "Meeting %": [round(ageing_pivot["Meeting Expectations"].sum() / ageing_pivot["Total_Employees"].sum() * 100, 1) if ageing_pivot["Total_Employees"].sum() > 0 else 0],
+            "Exceptional %": [round(ageing_pivot["Exceptional"].sum() / ageing_pivot["Total_Employees"].sum() * 100, 1) if ageing_pivot["Total_Employees"].sum() > 0 else 0],
+            "Missing %": [round(ageing_pivot["Missing"].sum() / ageing_pivot["Total_Employees"].sum() * 100, 1) if ageing_pivot["Total_Employees"].sum() > 0 else 0]
+        })
+
+        ageing_pivot = pd.concat([ageing_pivot, total_row], ignore_index=True)
+
+        ageing_order = ["Less Than 3 Months", "4-12 Months", "Above 12 Months", "Missing", "Total"]
+        ageing_pivot["Ageing Bucket"] = pd.Categorical(ageing_pivot["Ageing Bucket"], categories=ageing_order, ordered=True)
+        ageing_pivot = ageing_pivot.sort_values("Ageing Bucket")
+
+        largest_below_bucket = (
+            ageing_pivot[ageing_pivot["Ageing Bucket"] != "Total"]
+            .sort_values("Below Expectations", ascending=False)
+            .iloc[0]["Ageing Bucket"]
+            if not ageing_pivot.empty else "None"
+        )
+
+        st.info(
+            f"""
+            **Leadership Narrative:**  
+            The most pressure is currently seen in **{largest_below_bucket}** ageing bucket.  
+            This summary helps leaders assess whether newer executives need onboarding support or mature executives need productivity intervention.
+            """
+        )
+
+        st.dataframe(ageing_pivot, use_container_width=True)
+
+        # ==================================================
+        # 3. Node Performance Summary
+        # ==================================================
+        st.subheader(f"Node Performance Summary ({period_months} Months)")
+
+        node_df = action_df.copy()
+
+        if "INSTALLATION NODE" in node_df.columns:
+            node_summary = (
+                node_df.groupby(["EXEC_CITY_FINAL", "INSTALLATION NODE"], dropna=False)
+                .agg(
+                    Installation=("Installation", "sum"),
+                    Winback=("Winback", "sum"),
+                    Total=("ACCOUNT NO", "count"),
+                    Value=("Plan Value", "sum")
+                )
+                .reset_index()
+            )
+
+            node_summary["Avg Value/Sale"] = (node_summary["Value"] / node_summary["Total"]).round(0)
+
+            def node_flag(row):
+                if row["Avg Value/Sale"] < 1500:
+                    return "Low Revenue Mix"
+                elif row["Avg Value/Sale"] < 2500:
+                    return "Moderate"
+                else:
+                    return "High Value Node"
+
+            node_summary["Action Flag"] = node_summary.apply(node_flag, axis=1)
+
+            top_node_by_count = node_summary.sort_values("Total", ascending=False).iloc[0]["INSTALLATION NODE"] if not node_summary.empty else "None"
+            top_node_by_value = node_summary.sort_values("Value", ascending=False).iloc[0]["INSTALLATION NODE"] if not node_summary.empty else "None"
+
+            st.info(
+                f"""
+                **Leadership Narrative:**  
+                The strongest node by contribution count is **{top_node_by_count}**, while the highest value concentration is on **{top_node_by_value}**.  
+                Leaders should review low-count but high-value nodes for scale-up and high-count but low-value nodes for upsell opportunities.
+                """
+            )
+
+            node_summary = node_summary.rename(columns={"EXEC_CITY_FINAL": "Exec City"})
+            st.dataframe(
+                node_summary.sort_values(["Total", "Value"], ascending=[False, False]),
+                use_container_width=True
+            )
+
+        # ==================================================
+        # 4. Plan / Revenue Quality Summary
+        # ==================================================
+        st.subheader(f"Plan Selling Pattern Summary ({period_months} Months)")
+
+        plan_summary = (
+            action_df.groupby(["ARPU_BUCKET", "VALIDITY In Months", "SPEED (Mbps)"], dropna=False)
+            .agg(
+                Count=("ACCOUNT NO", "count"),
                 Value=("Plan Value", "sum")
             )
             .reset_index()
         )
 
-        node_summary["Avg Value/Sale"] = (node_summary["Value"] / node_summary["Total"]).round(0)
+        if not plan_summary.empty:
+            plan_summary["Avg Plan Value/Sale"] = (plan_summary["Value"] / plan_summary["Count"]).round(0)
 
-        def node_flag(row):
-            if row["Avg Value/Sale"] < 1500:
-                return "Low Revenue Mix"
-            elif row["Avg Value/Sale"] < 2500:
-                return "Moderate"
-            else:
-                return "High Value Node"
+            def plan_flag(row):
+                if row["ARPU_BUCKET"] in ["upto 300", "301-500"] and row["VALIDITY In Months"] in [1, 3]:
+                    return "Low Yield Mix"
+                elif row["ARPU_BUCKET"] in ["501-750", "751+"] and row["VALIDITY In Months"] in [6, 12]:
+                    return "Strong Revenue Quality"
+                else:
+                    return "Balanced Mix"
 
-        node_summary["Action Flag"] = node_summary.apply(node_flag, axis=1)
+            plan_summary["Action Flag"] = plan_summary.apply(plan_flag, axis=1)
 
-        st.dataframe(
-            node_summary.sort_values(["Total", "Value"], ascending=[False, False]),
-            use_container_width=True
-        )
+            low_yield_count = plan_summary[plan_summary["Action Flag"] == "Low Yield Mix"]["Count"].sum()
+            strong_yield_count = plan_summary[plan_summary["Action Flag"] == "Strong Revenue Quality"]["Count"].sum()
 
-    # ------------------------------------------
-    # Plan / Revenue Quality Summary
-    # ------------------------------------------
-    st.subheader(f"Plan Selling Pattern Summary ({period_months} Months)")
+            st.info(
+                f"""
+                **Leadership Narrative:**  
+                Current plan selling mix shows **{low_yield_count}** counts in low-yield combinations and **{strong_yield_count}** counts in strong revenue-quality combinations.  
+                Leaders should coach teams selling mostly low ARPU + short-validity plans to improve value quality per sale.
+                """
+            )
 
-    plan_summary = (
-        filtered_df_base.groupby(["ARPU_BUCKET", "VALIDITY In Months", "SPEED (Mbps)"], dropna=False)
-        .agg(
-            Count=("ACCOUNT NO", "count"),
-            Value=("Plan Value", "sum")
-        )
-        .reset_index()
-    )
+            st.dataframe(
+                plan_summary.sort_values(["Value", "Count"], ascending=[False, False]),
+                use_container_width=True
+            )
 
-    if not plan_summary.empty:
-        plan_summary["Avg Plan Value/Sale"] = (plan_summary["Value"] / plan_summary["Count"]).round(0)
+        # ==================================================
+        # 5. Underperformer Alert List
+        # ==================================================
+        st.subheader(f"Underperformer Alert List ({period_months} Months)")
 
-        def plan_flag(row):
-            if row["ARPU_BUCKET"] in ["upto 300", "301-500"] and row["VALIDITY In Months"] in [1, 3]:
-                return "Low Yield Mix"
-            elif row["ARPU_BUCKET"] in ["501-750", "751+"] and row["VALIDITY In Months"] in [6, 12]:
-                return "Strong Revenue Quality"
-            else:
-                return "Balanced Mix"
+        alerts = exec_action[exec_action["Expectation Status"] == "Below Expectations"].copy()
 
-        plan_summary["Action Flag"] = plan_summary.apply(plan_flag, axis=1)
+        if not alerts.empty:
+            alerts["Recommended Action"] = alerts.apply(
+                lambda row: (
+                    "Coach on higher validity / ARPU mix"
+                    if row["Avg Plan Value/Sale"] < 1500
+                    else "Review pipeline, territory and node productivity"
+                ),
+                axis=1
+            )
 
-        st.dataframe(
-            plan_summary.sort_values(["Value", "Count"], ascending=[False, False]),
-            use_container_width=True
-        )
+            top_gap_exec = alerts.sort_values("Target Gap").iloc[0]["Exec Name"]
+            top_gap_value = alerts.sort_values("Target Gap").iloc[0]["Target Gap"]
 
-    # ------------------------------------------
-    # Underperformer Alert List
-    # ------------------------------------------
-    st.subheader(f"Underperformer Alert List ({period_months} Months)")
+            st.warning(
+                f"""
+                **Leadership Narrative:**  
+                There are **{alerts['Exec Name'].nunique()} active Sales executives below expectations** in the selected scope.  
+                The sharpest gap is currently with **{top_gap_exec}** at **{top_gap_value}** below target on average monthly count.  
+                Immediate intervention should focus on territory productivity, plan mix quality, and execution discipline.
+                """
+            )
 
-    alerts = exec_action[exec_action["Expectation Status"] == "Below Expectations"].copy()
+            st.dataframe(
+                alerts[
+                    [
+                        "Exec Name", "Exec City", "Status", "Ageing Bucket",
+                        "Installation", "Winback", "Total",
+                        "Avg/Month Count", "Target Avg/Month",
+                        "Target Gap", "Avg Plan Value/Sale",
+                        "Expectation Status", "Recommended Action"
+                    ]
+                ].sort_values(["Target Gap", "Total"]),
+                use_container_width=True
+            )
+        else:
+            st.success("No active Sales executives are currently below expectations for selected filters.")
 
-    if not alerts.empty:
-        alerts["Recommended Action"] = alerts.apply(
-            lambda row: (
-                "Coach on higher validity / ARPU mix"
-                if row["Avg Plan Value/Sale"] < 1500
-                else "Review pipeline and local node performance"
-            ),
-            axis=1
-        )
-
-        st.dataframe(
-            alerts[
-                [
-                    "Exec Name", "EXEC_CITY_FINAL", "Status", "Ageing Bucket",
-                    "Installation", "Winback", "Total",
-                    "Avg/Month Count", "Target Avg/Month",
-                    "Target Gap", "Avg Plan Value/Sale",
-                    "Expectation Status", "Recommended Action"
-                ]
-            ].sort_values(["Target Gap", "Total"]),
-            use_container_width=True
-        )
-    else:
-        st.success("No executives currently in Below Expectations for selected filters.")
-
-# --------------------------------------------------
-# Footer info
-# --------------------------------------------------
-latest_month = (
-    source_df["MonthYear"].dropna().iloc[-1]
-    if "MonthYear" in source_df.columns and not source_df["MonthYear"].dropna().empty
-    else "N/A"
-)
-st.caption(f"Latest month available in data: {latest_month}")
