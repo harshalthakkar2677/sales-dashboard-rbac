@@ -8,24 +8,6 @@ import plotly.express as px
 # --------------------------------------------------
 st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
 
-validate_required_files()
-# --------------------------------------------------
-# Header
-# --------------------------------------------------
-logo_path = LOGO_FILE
-
-col1, col2 = st.columns([1, 5])
-with col1:
-    if os.path.exists(logo_path):
-        st.image(logo_path, width=120)
-with col2:
-    st.title("Sales & Installations Dashboard")
-    st.markdown("#### CEO & Sales Team View")
-
-# --------------------------------------------------
-# Refresh Control
-# --------------------------------------------------
-
 # --------------------------------------------------
 # File Paths
 # --------------------------------------------------
@@ -65,6 +47,32 @@ def validate_required_files():
             st.code(f"Could not list files: {e}")
 
         st.stop()
+        
+validate_required_files()
+
+with st.expander("Deployment Debug Info"):
+    st.write("Current working directory:", os.getcwd())
+    st.write("Files in current directory:")
+    st.code("\n".join(os.listdir(".")))
+    
+# --------------------------------------------------
+# Header
+# --------------------------------------------------
+logo_path = LOGO_FILE
+
+col1, col2 = st.columns([1, 5])
+with col1:
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=120)
+with col2:
+    st.title("Sales & Installations Dashboard")
+    st.markdown("#### CEO & Sales Team View")
+
+# --------------------------------------------------
+# Refresh Control
+# --------------------------------------------------
+
+
 
 refresh_col1, refresh_col2 = st.columns([1, 5])
 with refresh_col1:
