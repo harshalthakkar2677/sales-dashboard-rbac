@@ -483,7 +483,7 @@ contribution_mode = st.sidebar.selectbox(
 st.sidebar.header("Filters")
 
 st.sidebar.markdown("### User Access")
-st.sidebar.write(f"👤 {st.session_state.get('username', '')}")
+st.sidebar.write(f"👤 {st.session_state.get('UserID', '')}")
 st.sidebar.write(f"Role: {st.session_state.get('role', '')}")
 st.sidebar.write(f"Access Scope: {st.session_state.get('region_city', '')}")
 
