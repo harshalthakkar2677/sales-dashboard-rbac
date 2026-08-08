@@ -399,7 +399,8 @@ def load_data(file_mtime):
         df["DEPARTMENT_FINAL"] = df["DEPARTMENT_CLEAN"]
         df["SALES EXEC DOJ FINAL"] = df["SALES EXEC DOJ"]
         df["EXEC_CITY_FINAL"] = df["City"] if "City" in df.columns else "Unknown"
-
+        
+    today = pd.Timestamp.today().normalize()
     df["Exec_Ageing_Months"] = ((today - df["SALES EXEC DOJ FINAL"]).dt.days / 30.44).round(1)
     df["Exec_Ageing_Bucket"] = df["Exec_Ageing_Months"].apply(ageing_bucket)
     df["Target_Avg_Month"] = df["Exec_Ageing_Bucket"].apply(target_by_ageing)
@@ -482,7 +483,7 @@ def load_data(file_mtime):
             wb["SALES EXEC DOJ FINAL"] = wb["SALES EXEC DOJ"]
             wb["EXEC_CITY_FINAL"] = wb["City"] if "City" in wb.columns else "Unknown"
 
-
+        today = pd.Timestamp.today().normalize()
         wb["Exec_Ageing_Months"] = ((today - wb["SALES EXEC DOJ FINAL"]).dt.days / 30.44).round(1)
         wb["Exec_Ageing_Bucket"] = wb["Exec_Ageing_Months"].apply(ageing_bucket)
         wb["Target_Avg_Month"] = wb["Exec_Ageing_Bucket"].apply(target_by_ageing)
