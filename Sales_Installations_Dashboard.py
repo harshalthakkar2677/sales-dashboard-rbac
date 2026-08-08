@@ -185,7 +185,7 @@ def normalize_department(x):
 
 def ageing_bucket(months):
     if pd.isna(months):
-    return mapping.get(bucket, 0)
+       return mapping.get(bucket, 0)
 
 def expectation_label(avg_sales, target):
     if pd.isna(avg_sales) or pd.isna(target):
