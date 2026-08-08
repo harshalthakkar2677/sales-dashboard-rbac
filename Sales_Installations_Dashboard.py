@@ -3,6 +3,64 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
+
+# -----------------------------
+# 1. Load User Master from Excel
+# -----------------------------
+users_df = pd.read_excel("Access Master.xlsx")
+
+# -----------------------------
+# 2. Login Form
+# -----------------------------
+st.title("🔐 Sales Performance & Installation SLA Login")
+
+username = st.text_input("Username")
+password = st.text_input("Password", type="password")
+
+login_btn = st.button("Login")
+
+# -----------------------------
+# 3. Authentication & Role Mapping
+# -----------------------------
+if login_btn:
+    user = users_df[
+        (users_df['Username'] == username) &
+        (users_df['Password'] == password)
+    ]
+
+    if not user.empty:
+        role = user['Role'].values[0]
+        region = user['Region/City'].values[0]
+
+        st.sidebar.success(f"Logged in as {role}")
+
+        # -----------------------------
+        # 4. Role-Based Views
+        # -----------------------------
+        if role == "Manager":
+            st.header("📊 Manager Dashboard")
+            st.write("Full access to all metrics, predictive analysis, TAT buckets, and city-wide performance.")
+            # 👉 Place your full dashboard charts/tables here
+            # Example: st.dataframe(full_df)
+
+        elif role == "Regional Lead":
+            # Split comma-separated cities into a list
+            allowed_cities = [city.strip() for city in region.split(",")]
+            st.header(f"🌍 Regional Dashboard - {', '.join(allowed_cities)}")
+            st.write("Access limited to city-level performance and SLA metrics.")
+            # 👉 Filter your data by allowed cities
+            # Example:
+            # regional_df = df[df['City'].isin(allowed_cities)]
+            # st.dataframe(regional_df)
+
+        elif role == "Field Team":
+            st.header("🏢 Field Team Dashboard")
+            st.write("Access limited to assigned building/zone data and demo conversion stats.")
+            # 👉 Filter your data by building/zone
+            # Example: st.dataframe(df[df['Building'] == building])
+
+    else:
+        st.error("Invalid credentials. Please try again.")
 # --------------------------------------------------
 # Page Config
 # --------------------------------------------------
