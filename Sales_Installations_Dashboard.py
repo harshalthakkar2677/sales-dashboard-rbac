@@ -84,8 +84,8 @@ with col2:
 # --------------------------------------------------
 # Refresh Control
 # --------------------------------------------------
-DATA_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\New Registration Report.csv"
-WINBACK_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\New Winback Report.csv"
+DATA_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Registration Report.csv"
+WINBACK_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Winback Report.csv"
 
 refresh_col1, refresh_col2 = st.columns([1, 5])
 with refresh_col1:
