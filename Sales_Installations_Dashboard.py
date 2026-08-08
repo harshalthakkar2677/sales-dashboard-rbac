@@ -1,10 +1,7 @@
-    import os
-    import pandas as pd
-    import streamlit as st
-    import plotly.express as px
-    
+import os   
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 # --- Logo and Header ---
 st.image("company_logo.png", width=200)
