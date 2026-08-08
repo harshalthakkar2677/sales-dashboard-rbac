@@ -1,52 +1,67 @@
-import os
-import pandas as pd
-import streamlit as st
-import plotly.express as px
-
-
-# -----------------------------
-# 1. Load User Master from Excel
-# -----------------------------
-users_df = pd.read_excel("Access Master.xlsx")
-
-st.image("company_logo.png", width=200)
-st.markdown("### Welcome to the Sales & Installation Dashboard")
-# -----------------------------
-# 2. Login Form
-# -----------------------------
-st.title("🔐 Sales Performance & Installation SLA Login")
-
-username = st.text_input("Username")
-password = st.text_input("Password", type="password")
-
-login_btn = st.button("Login")
-
-# -----------------------------
-# 3. Authentication & Role Mapping
-# -----------------------------
-if login_btn:
-    user = users_df[
-        (users_df['Username'] == username) &
-        (users_df['Password'] == password)
-    ]
-
-    if not user.empty:
-        role = user['Role'].values[0]
-        region = user['Region/City'].values[0]
-
-        st.sidebar.success(f"Logged in as {role}")
-
-        # -----------------------------
-        # 4. Role-Based Views
-        # -----------------------------
-        if role == "Manager":
-            st.header("📊 Manager Dashboard")
-            st.write("Full access to all metrics, predictive analysis, TAT buckets, and city-wide performance.")
-            
     import os
     import pandas as pd
     import streamlit as st
     import plotly.express as px
+    
+import streamlit as st
+import pandas as pd
+
+# --- Logo and Header ---
+st.image("company_logo.png", width=200)
+st.markdown("## Welcome to the Sales & Installation Dashboard")
+st.markdown("🔐 Sales Performance & Installation SLA Login")
+
+# --- Load Access Master ---
+access_master = pd.read_excel("Access Master.xlsx")
+
+# --- Login Form ---
+username = st.text_input("Username")
+password = st.text_input("Password", type="password")
+
+if st.button("Login"):
+    # Check if user exists in Access Master
+    user_row = access_master[
+        (access_master["Username"] == username) &
+        (access_master["Password"] == password)
+    ]
+
+    if not user_row.empty:
+        role = user_row["Role"].values[0]
+        region = user_row["Region/City"].values[0]
+
+        # --- Load Dashboard Data ---
+        DATA_FILE = "New Registration Report.csv"
+        WINBACK_FILE = "New Winback Report.csv"
+        df = pd.read_csv(DATA_FILE)
+        wb = pd.read_csv(WINBACK_FILE)
+
+        # --- Role-based Dashboards ---
+        if role == "Manager":
+            st.header("📊 Manager Dashboard - All Cities")
+            st.dataframe(df)
+
+        elif role == "Regional Lead":
+            # Split comma-separated cities into a list
+            allowed_cities = [city.strip() for city in region.split(",")]
+            st.header(f"🌍 Regional Dashboard - {', '.join(allowed_cities)}")
+            st.write("Access limited to city-level performance and SLA metrics.")
+
+            regional_df = df[df['City'].isin(allowed_cities)]
+            st.dataframe(regional_df)
+
+            regional_wb = wb[wb['City'].isin(allowed_cities)]
+            st.dataframe(regional_wb)
+
+        elif role == "CEO":
+            st.header("🏢 Sales & Installations Dashboard - CEO & Sales Team View")
+            st.dataframe(df)
+            st.dataframe(wb)
+
+        else:
+            st.warning("Role not recognized.")
+
+    else:
+        st.error("Invalid username or password")
 
     # --------------------------------------------------
     # Page Config
@@ -69,8 +84,8 @@ if login_btn:
     # --------------------------------------------------
     # Refresh Control
     # --------------------------------------------------
-    DATA_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\New Registration Report.csv"
-    WINBACK_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\New Winback Report.csv"
+    DATA_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Registration Report.csv"
+    WINBACK_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Winback Report.csv"
 
     refresh_col1, refresh_col2 = st.columns([1, 5])
     with refresh_col1:
@@ -1319,19 +1334,3 @@ if login_btn:
         else "N/A"
     )
     st.caption(f"Latest month available in data: {latest_month}")
-
-
-        elif role == "Regional Lead":
-            # Split comma-separated cities into a list
-            allowed_cities = [city.strip() for city in region.split(",")]
-            st.header(f"🌍 Regional Dashboard - {', '.join(allowed_cities)}")
-            st.write("Access limited to city-level performance and SLA metrics.")
-            # 👉 Filter your data by allowed cities
-            # Example:
-            # regional_df = df[df['City'].isin(allowed_cities)]
-            # st.dataframe(regional_df)
-
-    else:
-        st.error("Invalid credentials. Please try again.")
-    elif avg_sales == target:
-
