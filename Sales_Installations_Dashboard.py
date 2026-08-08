@@ -60,17 +60,6 @@ if not st.session_state.authenticated:
         else:
             st.error("Invalid username or password")
 
-# --- Dashboard Phase ---
-if st.session_state.authenticated:
-    DATA_FILE = "New Registration Report.csv"
-    WINBACK_FILE = "New Winback Report.csv"
-    df = pd.read_csv(DATA_FILE)
-    wb = pd.read_csv(WINBACK_FILE)
-
-    render_dashboard(df, wb, st.session_state.role, st.session_state.region)
-
-
-# --------------------------------------------------
 # Page Config
 # --------------------------------------------------
 st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
@@ -196,20 +185,6 @@ def normalize_department(x):
 
 def ageing_bucket(months):
     if pd.isna(months):
-        return "Missing"
-    elif months <= 3:
-        return "Less Than 3 Months"
-    elif months <= 12:
-        return "4-12 Months"
-    else:
-        return "Above 12 Months"
-
-def target_by_ageing(bucket):
-    mapping = {
-        "Less Than 3 Months": 5,
-        "4-12 Months": 8,
-        "Above 12 Months": 12
-    }
     return mapping.get(bucket, 0)
 
 def expectation_label(avg_sales, target):
