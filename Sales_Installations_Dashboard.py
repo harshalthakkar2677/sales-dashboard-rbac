@@ -1,32 +1,3 @@
-import streamlit as st
-import pandas as pd
-
-# --- Page Config ---
-st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
-
-# --- Load Access Master ---
-access_master = pd.read_excel("Access Master.xlsx")
-
-# --- Session State ---
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-
-# --- Login Phase ---
-if not st.session_state.authenticated:
-    st.title("🔐 Sales Performance & Installation SLA Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        user_row = access_master[
-            (access_master["Username"] == username) &
-            (access_master["Password"] == password)
-        ]
-        if not user_row.empty:
-            st.session_state.authenticated = True
-        else:
-            st.error("Invalid username or password")
-
 import os
 import pandas as pd
 import streamlit as st
@@ -36,7 +7,7 @@ import plotly.express as px
 # Page Config
 # --------------------------------------------------
 st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
-  
+
 # --------------------------------------------------
 # Header
 # --------------------------------------------------
@@ -55,6 +26,7 @@ with col2:
 # --------------------------------------------------
 DATA_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Registration Report.csv"
 WINBACK_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Winback Report.csv"
+ACCESS_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\Access Master.xlsx"
 
 refresh_col1, refresh_col2 = st.columns([1, 5])
 with refresh_col1:
@@ -190,6 +162,52 @@ def sort_month_df(df_in, month_col="MonthYear"):
         out[f"{month_col}_dt"] = pd.to_datetime(out[month_col], format="%b-%Y", errors="coerce")
         out = out.sort_values(f"{month_col}_dt")
     return out
+    
+
+# --------------------------------------------------
+# Access Control Helpers
+# --------------------------------------------------
+@st.cache_data
+def load_access_master():
+    access_df = pd.read_excel(ACCESS_FILE)
+    access_df.columns = access_df.columns.str.strip()
+    access_df["UserID"] = access_df["UserID"].astype(str).str.strip()
+    access_df["Username"] = access_df["Username"].astype(str).str.strip()
+    access_df["Password"] = access_df["Password"].astype(str).str.strip()
+    access_df["Role"] = access_df["Role"].astype(str).str.strip()
+    access_df["Region/City"] = access_df["Region/City"].astype(str).str.strip()
+    return access_df
+
+def login_page():
+    st.title("🔐 Dashboard Login")
+    st.markdown("Please login to access the dashboard")
+
+    access_df = load_access_master()
+
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+
+    if submitted:
+        user_match = access_df[
+            (access_df["Username"] == username.strip()) &
+            (access_df["Password"] == password.strip())
+        ]
+
+        if not user_match.empty:
+            user_row = user_match.iloc[0]
+
+            st.session_state["authenticated"] = True
+            st.session_state["userid"] = user_row["UserID"]
+            st.session_state["username"] = user_row["Username"]
+            st.session_state["role"] = user_row["Role"]
+            st.session_state["region_city"] = user_row["Region/City"]
+
+            st.success(f"Welcome {user_row['Username']} ({user_row['Role']})")
+            st.rerun()
+        else:
+            st.error("Invalid username or password")
 
 # --------------------------------------------------
 # Cached Data Loader
@@ -396,6 +414,13 @@ def load_data(file_mtime):
 
     return df, wb
 
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    login_page()
+    st.stop()
+
 df, wb = load_data(file_mtime)
 
 # --------------------------------------------------
@@ -412,9 +437,31 @@ contribution_mode = st.sidebar.selectbox(
 # --------------------------------------------------
 st.sidebar.header("Filters")
 
+st.sidebar.markdown("### User Access")
+st.sidebar.write(f"👤 {st.session_state.get('username', '')}")
+st.sidebar.write(f"Role: {st.session_state.get('role', '')}")
+st.sidebar.write(f"Access Scope: {st.session_state.get('region_city', '')}")
+
+if st.sidebar.button("Logout"):
+    for key in ["authenticated", "userid", "username", "role", "region_city"]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
+
+st.sidebar.markdown("---")
+
+access_role = st.session_state.get("role", "")
+access_region_city = st.session_state.get("region_city", "")
+
+if access_role == "Regional Lead":
+    allowed_cities = [x.strip() for x in access_region_city.split(",") if x.strip()]
+    city_options = sorted(df[df["City"].isin(allowed_cities)]["City"].dropna().astype(str).unique()) if "City" in df.columns else []
+else:
+    city_options = sorted(df["City"].dropna().astype(str).unique()) if "City" in df.columns else []
+
 city = st.sidebar.selectbox(
     "City",
-    ["All"] + sorted(df["City"].dropna().astype(str).unique()) if "City" in df.columns else ["All"]
+    ["All"] + city_options
 )
 
 department = st.sidebar.selectbox(
@@ -483,6 +530,19 @@ network_type = st.sidebar.selectbox(
 # Apply filters
 # --------------------------------------------------
 filtered_df_base = source_df.copy()
+
+# --------------------------------------------------
+# Role-based access restriction
+# --------------------------------------------------
+user_role = st.session_state.get("role", "")
+user_region_city = st.session_state.get("region_city", "")
+
+if user_role == "Regional Lead":
+    allowed_cities = [x.strip() for x in user_region_city.split(",") if x.strip()]
+    filtered_df_base = filtered_df_base[filtered_df_base["City"].isin(allowed_cities)]
+
+elif user_role == "Manager":
+    pass
 
 if city != "All" and "City" in filtered_df_base.columns:
     filtered_df_base = filtered_df_base[filtered_df_base["City"] == city]
