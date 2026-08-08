@@ -8,10 +8,11 @@ import plotly.express as px
 # --------------------------------------------------
 st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
 
+validate_required_files()
 # --------------------------------------------------
 # Header
 # --------------------------------------------------
-logo_path = os.path.join(os.path.dirname(__file__), "company_logo.png")
+logo_path = LOGO_FILE
 
 col1, col2 = st.columns([1, 5])
 with col1:
@@ -24,9 +25,46 @@ with col2:
 # --------------------------------------------------
 # Refresh Control
 # --------------------------------------------------
-DATA_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Registration Report.csv"
-WINBACK_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Winback Report.csv"
-ACCESS_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\Access Master.xlsx"
+
+# --------------------------------------------------
+# File Paths
+# --------------------------------------------------
+DATA_FILE = "New Registration Report.csv"
+WINBACK_FILE = "New Winback Report.csv"
+ACCESS_FILE = "Access Master.xlsx"
+LOGO_FILE = "company_logo.png"
+
+# --------------------------------------------------
+# Cloud-safe startup file validation
+# --------------------------------------------------
+def validate_required_files():
+    required_files = {
+        "Dashboard Data File": DATA_FILE,
+        "Winback File": WINBACK_FILE,
+        "Access Master File": ACCESS_FILE,
+        "Logo File": LOGO_FILE
+    }
+
+    missing_files = []
+    for label, path in required_files.items():
+        if not os.path.exists(path):
+            missing_files.append((label, path))
+
+    if missing_files:
+        st.error("❌ Required file(s) missing. Please check your GitHub repo / Streamlit Cloud deployment.")
+        for label, path in missing_files:
+            st.write(f"**Missing:** {label} → `{path}`")
+
+        st.info("Current working directory:")
+        st.code(os.getcwd())
+
+        st.info("Files visible to Streamlit in current folder:")
+        try:
+            st.code("\n".join(os.listdir(".")))
+        except Exception as e:
+            st.code(f"Could not list files: {e}")
+
+        st.stop()
 
 refresh_col1, refresh_col2 = st.columns([1, 5])
 with refresh_col1:
@@ -169,6 +207,10 @@ def sort_month_df(df_in, month_col="MonthYear"):
 # --------------------------------------------------
 @st.cache_data
 def load_access_master():
+    if not os.path.exists(ACCESS_FILE):
+        st.error(f"❌ Access file not found: {ACCESS_FILE}")
+        st.stop()
+
     access_df = pd.read_excel(ACCESS_FILE)
     access_df.columns = access_df.columns.str.strip()
     access_df["UserID"] = access_df["UserID"].astype(str).str.strip()
