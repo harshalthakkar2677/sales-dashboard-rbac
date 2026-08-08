@@ -1,32 +1,19 @@
-import os
-import pandas as pd
 import streamlit as st
-import plotly.express as px
+import pandas as pd
 
-# --------------------------------------------------
-# Page Config
-# --------------------------------------------------
+# --- Page Config ---
 st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
-
-# --- Logo + Header ---
-logo_path = os.path.join(os.path.dirname(__file__), "company_logo.png")
-col1, col2 = st.columns([1, 5])
-with col1:
-    if os.path.exists(logo_path):
-        st.image(logo_path, width=120)
-with col2:
-    st.title("Sales & Installations Dashboard")
-    st.markdown("#### 🔐 Sales Performance & Installation SLA Login")
 
 # --- Load Access Master ---
 access_master = pd.read_excel("Access Master.xlsx")
 
-# --- Session State for Login ---
+# --- Session State ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 # --- Login Phase ---
 if not st.session_state.authenticated:
+    st.title("🔐 Sales Performance & Installation SLA Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
@@ -39,15 +26,17 @@ if not st.session_state.authenticated:
             st.session_state.authenticated = True
         else:
             st.error("Invalid username or password")
-            
-# --- Dashboard Phase ---
-if st.session_state.authenticated:
-    # Load your data
-    DATA_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Registration Report.csv"
-    WINBACK_FILE = r"C:\Users\Harshal Thakkar\Dashboard\Sales & Installation\sales-dashboard-rbac\New Winback Report.csv"
-    df = pd.read_csv(DATA_FILE)
-    wb = pd.read_csv(WINBACK_FILE)
-    
+
+import os
+import pandas as pd
+import streamlit as st
+import plotly.express as px
+
+# --------------------------------------------------
+# Page Config
+# --------------------------------------------------
+st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
+  
 # --------------------------------------------------
 # Header
 # --------------------------------------------------
