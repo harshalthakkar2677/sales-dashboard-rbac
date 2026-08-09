@@ -500,7 +500,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 df, wb = load_data(file_mtime)
-st.write(df[["SALES CODE", "SALES EXEC NAME", "City", "EXEC_CITY_FINAL"]].drop_duplicates().head(20))
+
 # --------------------------------------------------
 # Contribution Mode Filter
 # --------------------------------------------------
