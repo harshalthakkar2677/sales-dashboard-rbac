@@ -533,12 +533,12 @@ access_region_city = st.session_state.get("region_city", "")
 
 if access_role == "Regional Lead":
     allowed_cities = [x.strip() for x in access_region_city.split(",") if x.strip()]
-    city_options = sorted(df[df["City"].isin(allowed_cities)]["City"].dropna().astype(str).unique()) if "City" in df.columns else []
+    city_options = sorted(df[df["EXEC_CITY_FINAL"].isin(allowed_cities)]["EXEC_CITY_FINAL"].dropna().astype(str).unique()) if "EXEC_CITY_FINAL" in df.columns else []
 else:
-    city_options = sorted(df["City"].dropna().astype(str).unique()) if "City" in df.columns else []
+    city_options = sorted(df["EXEC_CITY_FINAL"].dropna().astype(str).unique()) if "EXEC_CITY_FINAL" in df.columns else []
 
 city = st.sidebar.selectbox(
-    "City",
+    "Executive City",
     ["All"] + city_options
 )
 
@@ -566,8 +566,8 @@ else:
 
 if "EXEC_NAME_FINAL" in source_df.columns:
     exec_df = source_df.copy()
-    if city != "All" and "City" in exec_df.columns:
-        exec_df = exec_df[exec_df["City"] == city]
+    if city != "All" and "EXEC_CITY_FINAL" in exec_df.columns:
+        exec_df = exec_df[exec_df["EXEC_CITY_FINAL"] == city]
     if department != "All" and "DEPARTMENT_FINAL" in exec_df.columns:
         exec_df = exec_df[exec_df["DEPARTMENT_FINAL"] == department]
     if exec_status != "All" and "EXEC_STATUS_FINAL" in exec_df.columns:
@@ -617,13 +617,13 @@ user_region_city = st.session_state.get("region_city", "")
 
 if user_role == "Regional Lead":
     allowed_cities = [x.strip() for x in user_region_city.split(",") if x.strip()]
-    filtered_df_base = filtered_df_base[filtered_df_base["City"].isin(allowed_cities)]
+    filtered_df_base = filtered_df_base[filtered_df_base["EXEC_CITY_FINAL"].isin(allowed_cities)]
 
 elif user_role == "Manager":
     pass
 
-if city != "All" and "City" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["City"] == city]
+if city != "All" and "EXEC_CITY_FINAL" in filtered_df_base.columns:
+    filtered_df_base = filtered_df_base[filtered_df_base["EXEC_CITY_FINAL"] == city]
 if department != "All" and "DEPARTMENT_FINAL" in filtered_df_base.columns:
     filtered_df_base = filtered_df_base[filtered_df_base["DEPARTMENT_FINAL"] == department]
 if exec_status != "All" and "EXEC_STATUS_FINAL" in filtered_df_base.columns:
