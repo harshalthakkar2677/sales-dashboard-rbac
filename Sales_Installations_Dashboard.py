@@ -610,40 +610,6 @@ network_type = st.sidebar.selectbox(
 filtered_df_base = source_df.copy()
 
 # --------------------------------------------------
-# Role-based access restriction
-# --------------------------------------------------
-user_role = st.session_state.get("role", "")
-user_region_city = st.session_state.get("region_city", "")
-
-if user_role == "Regional Lead":
-    allowed_cities = [x.strip() for x in user_region_city.split(",") if x.strip()]
-    filtered_df_base = filtered_df_base[filtered_df_base["City"].isin(allowed_cities)]
-
-elif user_role == "Manager":
-    pass
-
-if city != "All" and "City" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["City"] == city]
-if department != "All" and "DEPARTMENT_FINAL" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["DEPARTMENT_FINAL"] == department]
-if exec_status != "All" and "EXEC_STATUS_FINAL" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["EXEC_STATUS_FINAL"] == exec_status]
-if ageing_bucket_filter != "All" and "Exec_Ageing_Bucket" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["Exec_Ageing_Bucket"] == ageing_bucket_filter]
-if execu != "All" and "EXEC_NAME_FINAL" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["EXEC_NAME_FINAL"] == execu]
-if speed != "All" and "SPEED (Mbps)" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["SPEED (Mbps)"] == speed]
-if validity != "All" and "VALIDITY In Months" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["VALIDITY In Months"] == validity]
-if network_type != "All" and "NETWORK TYPE" in filtered_df_base.columns:
-    filtered_df_base = filtered_df_base[filtered_df_base["NETWORK TYPE"] == network_type]
-
-filtered_df = filtered_df_base.copy()
-if month != "All" and "MonthYear" in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df["MonthYear"] == month]
-
-# --------------------------------------------------
 # Tabs
 # --------------------------------------------------
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -1274,7 +1240,7 @@ with tab2:
                     x="MonthYear_str",
                     y="Count",
                     color="CUSTOMER CURRENT STATUS",
-                    title="Customer Current Status - Last 12 Months",
+                    title="Customer Current Status - Last 13 Months",
                     text="Label"
                 )
                 fig_status.update_traces(textposition="inside")
