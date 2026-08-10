@@ -1043,7 +1043,7 @@ def build_email_body(user_row, report_pack, mode):
     html = f"""
     <html>
     <body>
-        <p>Dear {UserID},</p>
+        <p>Dear {username},</p>
 
         <p>Please find below the <b>{mode.title()}</b> Sales Performance Review for <b>{period_label}</b>.</p>
 
