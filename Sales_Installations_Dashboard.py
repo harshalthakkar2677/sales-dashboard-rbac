@@ -319,7 +319,24 @@ def login_page():
 
     # Hero banner
     if os.path.exists("login_banner.png"):
-        st.image("telecom_analytics_banner.png", use_container_width=True)
+        st.markdown(
+    """
+    <div style="
+        background: linear-gradient(90deg, #eaf3fb 0%, #f8fbff 100%);
+        border: 1px solid #d9e6f2;
+        border-radius: 18px;
+        padding: 24px;
+        text-align: center;
+        margin-bottom: 10px;
+        color: #23415d;
+        font-size: 16px;
+        font-weight: 600;
+    ">
+        📡 Telecom Performance Intelligence • 📊 Sales Analytics • 🤖 Actionable Insights
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
     st.markdown("")
 
