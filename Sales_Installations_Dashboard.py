@@ -301,7 +301,7 @@ def inject_login_css():
         font-weight: 800;
         color: #1f3b57;
         text-align: center;
-        margin-top: -6px;
+        margin-top: -12px;
         margin-bottom: 0.15rem;
     }
 
@@ -453,7 +453,9 @@ def login_page():
         password = st.text_input("🔑 Password", type="password", placeholder="Enter your password")
 
         login_clicked = st.button("Login")
-
+        
+        access_df = load_access_master()
+        
         if login_clicked:
             user_match = access_df[
                 (access_df["Username"].astype(str).str.strip() == str(username).strip()) &
