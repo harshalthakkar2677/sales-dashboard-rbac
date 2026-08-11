@@ -748,7 +748,7 @@ st.sidebar.write(f"Role: {st.session_state.get('role', '')}")
 st.sidebar.write(f"Access Scope: {st.session_state.get('region_city', '')}")
 
 if st.sidebar.button("Logout"):
-    for key in ["authenticated", "userid", "username", "role", "region_city", "designation"]
+    for key in ["authenticated", "userid", "username", "role", "region_city", "designation"]:
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
