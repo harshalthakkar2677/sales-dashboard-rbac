@@ -138,17 +138,6 @@ def validate_required_files():
 validate_required_files()
   
 # --------------------------------------------------
-# Header
-# --------------------------------------------------
-logo_path = LOGO_FILE
-
-col1, col2 = st.columns([1, 5])
-with col1:
-    if os.path.exists(logo_path):
-        st.image(logo_path, width=120)
-with col2:
-    st.markdown("#### Created By - Harshal Thakkar")  
-# --------------------------------------------------
 # Refresh Control
 # --------------------------------------------------
 
@@ -303,17 +292,17 @@ def inject_login_css():
     }
 
     .block-container {
-        padding-top: 0.8rem !important;
+        padding-top: 0.5rem !important;
         padding-bottom: 1rem !important;
     }
 
     .hero-title {
-        font-size: 30px;
+        font-size: 29px;
         font-weight: 800;
         color: #1f3b57;
         text-align: center;
-        margin-top: -18px;
-        margin-bottom: 0.1rem;
+        margin-top: -6px;
+        margin-bottom: 0.15rem;
     }
 
     .hero-subtitle {
@@ -332,7 +321,7 @@ def inject_login_css():
         color: #35506b;
         font-size: 14px;
         font-weight: 600;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.45rem;
         box-shadow: 0 4px 10px rgba(0,0,0,0.04);
     }
 
@@ -342,7 +331,7 @@ def inject_login_css():
         border-radius: 16px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.06);
         border: 1px solid #dfe7f1;
-        margin-top: -2px;
+        margin-top: 0px;
     }
 
     div[data-baseweb="input"] > div {
@@ -385,7 +374,7 @@ def inject_login_css():
     }
 
     .login-wrap {
-        margin-top: -10px;
+        margin-top: -2px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -412,21 +401,23 @@ def load_access_master():
 def login_page():
     inject_login_css()
 
-    # Top row for logo + created by
-    col1, col2 = st.columns([1, 3])
+    logo_path = LOGO_FILE
 
-    with col1:
+    # Single top header row
+    head_left, head_right = st.columns([1.1, 4.4])
+
+    with head_left:
         if os.path.exists(logo_path):
-            st.image(logo_path, width=120)
+            st.image(logo_path, width=95)
 
-    with col2:
+    with head_right:
         st.markdown(
-            "<div style='text-align:right; color:#5f7387; font-size:20px; font-weight:600; margin-top:10px;'>Created By - Harshal Thakkar</div>",
+            "<div style='text-align:right; color:#5f7387; font-size:15px; font-weight:600; margin-top:12px;'>Created By - Harshal Thakkar</div>",
             unsafe_allow_html=True
         )
 
     # Main hero section
-    top_left, top_mid, top_right = st.columns([0.8, 2.4, 0.8])
+    top_left, top_mid, top_right = st.columns([0.9, 2.2, 0.9])
 
     with top_mid:
         st.markdown('<div class="hero-title">Sales & Installations Intelligence Hub</div>', unsafe_allow_html=True)
@@ -446,8 +437,8 @@ def login_page():
             unsafe_allow_html=True
         )
 
-    # Login section
-    left_spacer, login_col, right_spacer = st.columns([1.35, 0.9, 1.0])
+    # Compact login section
+    left_spacer, login_col, right_spacer = st.columns([1.45, 0.85, 1.1])
 
     with login_col:
         st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
@@ -484,6 +475,7 @@ def login_page():
 
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
+
 
 # --------------------------------------------------
 # Cached Data Loader
