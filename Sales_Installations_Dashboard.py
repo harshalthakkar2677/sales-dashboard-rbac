@@ -141,8 +141,6 @@ with col1:
     if os.path.exists(logo_path):
         st.image(logo_path, width=120)
 with col2:
-    st.title("Sales & Installations Dashboard")
-    st.markdown("<h2 style='text-align:left;'>Track Performance. Predict Trends. Drive Growth</h2>", unsafe_allow_html=True)
     st.markdown("#### Created By - Harshal Thakkar")
     
 # --------------------------------------------------
