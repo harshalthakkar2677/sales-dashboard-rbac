@@ -18,13 +18,19 @@ def inject_login_css():
     .main > div {
         padding-top: 1rem;
     }
+    
+    .block-container {
+    padding-top: 0.6rem !important;
+    padding-bottom: 1rem !important;
+    }
 
     .hero-title {
-        font-size: 34px;
+        font-size: 30px;
         font-weight: 800;
-        color: white;
+        color: #1f3b57;
         text-align: center;
-        margin-bottom: 0.2rem;
+        margin-top: -6px;
+        margin-bottom: 0.1rem;
     }
 
     .hero-subtitle {
@@ -407,7 +413,20 @@ def load_access_master():
 def login_page():
     inject_login_css()
 
-    # tighter centered top area
+    # Top row for logo + created by
+    col1, col2 = st.columns([1, 3])
+
+    with col1:
+        if os.path.exists(logo_path):
+            st.image(logo_path, width=90)
+
+    with col2:
+        st.markdown(
+            "<div style='text-align:right; color:#5f7387; font-size:14px; font-weight:600; margin-top:10px;'>Created By - Harshal Thakkar</div>",
+            unsafe_allow_html=True
+        )
+
+    # Main hero section
     top_left, top_mid, top_right = st.columns([0.8, 2.4, 0.8])
 
     with top_mid:
@@ -428,7 +447,7 @@ def login_page():
             unsafe_allow_html=True
         )
 
-    # login section moved up and slightly right-of-center
+    # Login section
     left_spacer, login_col, right_spacer = st.columns([1.35, 0.9, 1.0])
 
     with login_col:
@@ -466,8 +485,6 @@ def login_page():
 
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
-
 
 # --------------------------------------------------
 # Cached Data Loader
