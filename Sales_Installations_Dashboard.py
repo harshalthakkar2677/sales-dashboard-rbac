@@ -468,19 +468,20 @@ def login_page():
 
             if not user_match.empty:
                 row = user_match.iloc[0]
-                st.session_state["logged_in"] = True
-                st.session_state["user_id"] = row["UserID"]
+                st.session_state["authenticated"] = True
+                st.session_state["userid"] = row["UserID"]
                 st.session_state["username"] = row["Username"]
                 st.session_state["role"] = row["Role"]
                 st.session_state["region_city"] = row["Region/City"]
                 st.session_state["designation"] = row["Designation"] if "Designation" in row.index else row["Role"]
-                st.success(f"Welcome, {row['UserID']}! Redirecting...")
+                
+                st.success(f"Welcome, {row['UserID']}!")
                 st.rerun()
+
             else:
                 st.error("Invalid username or password.")
                 st.write("Entered Username:", username_clean)
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        
 
 
 # --------------------------------------------------
@@ -742,12 +743,12 @@ contribution_mode = st.sidebar.selectbox(
 st.sidebar.header("Filters")
 
 st.sidebar.markdown("### User Access")
-st.sidebar.write(f"👤 {st.session_state.get('userid', '')}")
+st.sidebar.write(f"👤 {st.session_state["user_id"] = row["UserID"]}")
 st.sidebar.write(f"Role: {st.session_state.get('role', '')}")
 st.sidebar.write(f"Access Scope: {st.session_state.get('region_city', '')}")
 
 if st.sidebar.button("Logout"):
-    for key in ["authenticated", "userid", "username", "role", "region_city"]:
+    for key in ["authenticated", "userid", "username", "role", "region_city", "designation"]
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
