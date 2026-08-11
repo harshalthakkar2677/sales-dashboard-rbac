@@ -137,7 +137,17 @@ def validate_required_files():
         
 validate_required_files()
   
-   
+# --------------------------------------------------
+# Header
+# --------------------------------------------------
+logo_path = LOGO_FILE
+
+col1, col2 = st.columns([1, 5])
+with col1:
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=120)
+with col2:
+    st.markdown("#### Created By - Harshal Thakkar")  
 # --------------------------------------------------
 # Refresh Control
 # --------------------------------------------------
