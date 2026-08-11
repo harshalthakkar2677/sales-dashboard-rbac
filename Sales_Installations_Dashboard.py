@@ -293,74 +293,69 @@ def inject_login_css():
     }
 
     .main > div {
-        padding-top: 0.3rem;
+        padding-top: 0rem;
+        padding-bottom: 0rem;
+    }
+
+    .block-container {
+        padding-top: 0.8rem !important;
+        padding-bottom: 1rem !important;
     }
 
     .hero-title {
-        font-size: 34px;
+        font-size: 30px;
         font-weight: 800;
         color: #1f3b57;
         text-align: center;
-        margin-bottom: 0.15rem;
-        margin-top: -8px;
+        margin-top: -10px;
+        margin-bottom: 0.1rem;
     }
 
     .hero-subtitle {
-        font-size: 15px;
+        font-size: 14px;
         color: #5f7387;
         text-align: center;
-        margin-bottom: 0.7rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .simple-hero-box {
+        background: #ffffff;
+        border: 1px solid #dde6ef;
+        border-radius: 16px;
+        padding: 10px 14px;
+        text-align: center;
+        color: #35506b;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.04);
     }
 
     .login-card {
         background: #ffffff;
-        padding: 20px 22px;
-        border-radius: 18px;
+        padding: 18px 20px;
+        border-radius: 16px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.06);
         border: 1px solid #dfe7f1;
-        margin-top: -6px;
-    }
-
-    .mini-card {
-        background: #ffffff;
-        padding: 12px 14px;
-        border-radius: 16px;
-        box-shadow: 0 6px 16px rgba(0,0,0,0.05);
-        border: 1px solid #e5ecf3;
-        margin-top: 4px;
-    }
-
-    .placeholder-card {
-        background: #f9fbfe;
-        border: 1px dashed #c9d8e8;
-        border-radius: 14px;
-        height: 260px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-        color: #6a8094;
-        font-size: 14px;
-        font-weight: 600;
-        line-height: 1.6;
+        margin-top: -2px;
     }
 
     div[data-baseweb="input"] > div {
-        border-radius: 12px !important;
+        border-radius: 10px !important;
         border: 1px solid #c9d6e2 !important;
-        min-height: 40px !important;
+        min-height: 38px !important;
         background-color: #ffffff !important;
     }
 
     input {
-        font-size: 14px !important;
+        font-size: 13px !important;
         color: #1f3b57 !important;
     }
 
     .stButton > button {
         width: 100%;
-        border-radius: 12px;
-        height: 40px;
+        border-radius: 10px;
+        height: 38px;
         background: #0f6cbd;
         color: white;
         font-weight: 700;
@@ -372,32 +367,20 @@ def inject_login_css():
     }
 
     .section-title {
-        font-size: 18px;
+        font-size: 17px;
         font-weight: 700;
         color: #1f3b57;
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.25rem;
     }
 
     .small-note {
-        font-size: 12px;
+        font-size: 11px;
         color: #6b7f92;
-    }
-
-    .simple-hero-box {
-        background: #ffffff;
-        border: 1px solid #dde6ef;
-        border-radius: 18px;
-        padding: 14px 16px;
-        text-align: center;
-        color: #35506b;
-        font-size: 15px;
-        font-weight: 600;
-        margin-bottom: 6px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+        margin-bottom: 0.2rem;
     }
 
     .login-wrap {
-        margin-top: -8px;
+        margin-top: -4px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -424,109 +407,29 @@ def load_access_master():
 def login_page():
     inject_login_css()
 
-    st.markdown('<div class="hero-title">Sales & Installations Intelligence Hub</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="hero-subtitle">Executive performance • Installation trends • ARPU intelligence • Revenue quality insights</div>',
-        unsafe_allow_html=True
-    )
+    # tighter centered top area
+    top_left, top_mid, top_right = st.columns([0.8, 2.4, 0.8])
 
-    st.markdown(
-        """
-        <div class="simple-hero-box">
-            📡 Telecom Performance Intelligence &nbsp;&nbsp;|&nbsp;&nbsp;
-            📊 Sales Analytics &nbsp;&nbsp;|&nbsp;&nbsp;
-            🎯 Actionable Leadership Insights
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # Preview section
-    preview_col1, preview_col2 = st.columns([1.15, 1])
-
-    with preview_col1:
-        st.markdown('<div class="mini-card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">📈 Performance Preview</div>', unsafe_allow_html=True)
-
-        try:
-            preview_df = df.copy() if "df" in globals() else None
-
-            if preview_df is not None and not preview_df.empty and "INSTALLATION DATE" in preview_df.columns:
-                trend_df = (
-                    preview_df.dropna(subset=["INSTALLATION DATE"])
-                    .assign(Month=preview_df["INSTALLATION DATE"].dt.to_period("M").dt.to_timestamp())
-                    .groupby("Month")
-                    .agg(Installations=("ACCOUNT NO", "count"))
-                    .reset_index()
-                    .sort_values("Month")
-                    .tail(6)
-                )
-
-                if not trend_df.empty:
-                    fig_preview_line = px.line(
-                        trend_df,
-                        x="Month",
-                        y="Installations",
-                        markers=True,
-                        title="Last 6 Months Installation Trend"
-                    )
-                    fig_preview_line.update_layout(
-                        height=240,
-                        margin=dict(l=10, r=10, t=35, b=10),
-                        title_font=dict(size=14)
-                    )
-                    st.plotly_chart(fig_preview_line, use_container_width=True)
-                else:
-                    st.markdown(
-                        """
-                        <div class="placeholder-card">
-                            📈 Trend Preview Placeholder<br>
-                            Light business chart visual area
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-            else:
-                st.markdown(
-                    """
-                    <div class="placeholder-card">
-                        📈 Trend Preview Placeholder<br>
-                        Light business chart visual area
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-        except Exception:
-            st.markdown(
-                """
-                <div class="placeholder-card">
-                    📈 Trend Preview Placeholder<br>
-                    Light business chart visual area
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with preview_col2:
-        st.markdown('<div class="mini-card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">🧩 Revenue Mix Preview</div>', unsafe_allow_html=True)
+    with top_mid:
+        st.markdown('<div class="hero-title">Sales & Installations Intelligence Hub</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="hero-subtitle">Executive performance • Installation trends • ARPU intelligence • Revenue quality insights</div>',
+            unsafe_allow_html=True
+        )
 
         st.markdown(
             """
-            <div class="placeholder-card">
-                🧩 Revenue Mix Placeholder<br>
-                ARPU • Validity • Value mix visual
+            <div class="simple-hero-box">
+                📡 Telecom Performance Intelligence &nbsp;&nbsp;|&nbsp;&nbsp;
+                📊 Sales Analytics &nbsp;&nbsp;|&nbsp;&nbsp;
+                🎯 Actionable Leadership Insights
             </div>
             """,
             unsafe_allow_html=True
         )
 
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # Login card moved upward and closer to preview row
-    left_spacer, login_col, right_spacer = st.columns([1.25, 0.9, 1.25])
+    # login section moved up and slightly right-of-center
+    left_spacer, login_col, right_spacer = st.columns([1.35, 0.9, 1.0])
 
     with login_col:
         st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
@@ -536,7 +439,6 @@ def login_page():
             '<div class="small-note">Sign in to access role-based dashboards and leadership insights.</div>',
             unsafe_allow_html=True
         )
-        st.markdown("<br>", unsafe_allow_html=True)
 
         username = st.text_input("👤 Username", placeholder="Enter your username")
         password = st.text_input("🔑 Password", type="password", placeholder="Enter your password")
@@ -564,6 +466,7 @@ def login_page():
 
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 # --------------------------------------------------
