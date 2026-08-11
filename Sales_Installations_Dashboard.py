@@ -8,6 +8,87 @@ import plotly.express as px
 # --------------------------------------------------
 st.set_page_config(page_title="Sales & Installations Dashboard", layout="wide")
 
+def inject_login_css():
+    st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #0b1f3a 0%, #123c69 45%, #f4f8fb 100%);
+    }
+
+    .main > div {
+        padding-top: 1rem;
+    }
+
+    .hero-title {
+        font-size: 34px;
+        font-weight: 800;
+        color: white;
+        text-align: center;
+        margin-bottom: 0.2rem;
+    }
+
+    .hero-subtitle {
+        font-size: 15px;
+        color: #d9e8f5;
+        text-align: center;
+        margin-bottom: 1.2rem;
+    }
+
+    .login-card {
+        background: rgba(255,255,255,0.96);
+        padding: 22px 24px;
+        border-radius: 18px;
+        box-shadow: 0 10px 28px rgba(0,0,0,0.20);
+        border: 1px solid rgba(255,255,255,0.35);
+    }
+
+    .mini-card {
+        background: rgba(255,255,255,0.94);
+        padding: 14px 16px;
+        border-radius: 16px;
+        box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+        margin-top: 10px;
+    }
+
+    div[data-baseweb="input"] > div {
+        border-radius: 12px !important;
+        border: 1px solid #b7c9db !important;
+        min-height: 42px !important;
+        background-color: #fbfdff !important;
+    }
+
+    input {
+        font-size: 14px !important;
+    }
+
+    .stButton > button {
+        width: 100%;
+        border-radius: 12px;
+        height: 42px;
+        background: linear-gradient(90deg, #0f6cbd 0%, #19a974 100%);
+        color: white;
+        font-weight: 700;
+        border: none;
+    }
+
+    .stButton > button:hover {
+        filter: brightness(1.05);
+        transform: translateY(-1px);
+    }
+
+    .section-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #16324f;
+        margin-bottom: 0.4rem;
+    }
+
+    .small-note {
+        font-size: 12px;
+        color: #5a6b7b;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 # --------------------------------------------------
 # File Paths
 # --------------------------------------------------
@@ -228,35 +309,133 @@ def load_access_master():
     return access_df
 
 def login_page():
-    st.title("🔐 Dashboard Login")
-    st.markdown("Please login to access the dashboard")
+    inject_login_css()
 
-    access_df = load_access_master()
+    st.markdown('<div class="hero-title">Sales & Installations Intelligence Hub</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-subtitle">Executive performance • Installation trends • ARPU intelligence • Revenue quality insights</div>',
+        unsafe_allow_html=True
+    )
 
-    with st.form("login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
+    # Hero banner
+    if os.path.exists("telecom_analytics_banner.png"):
+        st.image("login_banner.png", use_container_width=True)
 
-    if submitted:
-        user_match = access_df[
-            (access_df["Username"] == username.strip()) &
-            (access_df["Password"] == password.strip())
-        ]
+    st.markdown("")
 
-        if not user_match.empty:
-            user_row = user_match.iloc[0]
+    # Mini dashboard preview section
+    preview_col1, preview_col2 = st.columns([1.15, 1])
 
-            st.session_state["authenticated"] = True
-            st.session_state["userid"] = user_row["UserID"]
-            st.session_state["username"] = user_row["Username"]
-            st.session_state["role"] = user_row["Role"]
-            st.session_state["region_city"] = user_row["Region/City"]
+    with preview_col1:
+        st.markdown('<div class="mini-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">📈 Performance Preview</div>', unsafe_allow_html=True)
 
-            st.success(f"Welcome {user_row['Username']} ({user_row['Role']})")
-            st.rerun()
-        else:
-            st.error("Invalid username or password")
+        try:
+            preview_df = load_data(file_mtime)[0].copy()
+
+            if "INSTALLATION DATE" in preview_df.columns:
+                trend_df = (
+                    preview_df.dropna(subset=["INSTALLATION DATE"])
+                    .assign(Month=preview_df["INSTALLATION DATE"].dt.to_period("M").dt.to_timestamp())
+                    .groupby("Month")
+                    .agg(Installations=("ACCOUNT NO", "count"))
+                    .reset_index()
+                    .sort_values("Month")
+                    .tail(6)
+                )
+
+                if not trend_df.empty:
+                    fig_preview_line = px.line(
+                        trend_df,
+                        x="Month",
+                        y="Installations",
+                        markers=True,
+                        title="Last 6 Months Installation Trend"
+                    )
+                    fig_preview_line.update_layout(
+                        height=260,
+                        margin=dict(l=10, r=10, t=40, b=10),
+                        title_font=dict(size=14)
+                    )
+                    st.plotly_chart(fig_preview_line, use_container_width=True)
+        except Exception:
+            st.info("Preview chart will appear once source data is available.")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with preview_col2:
+        st.markdown('<div class="mini-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">🧩 Revenue Mix Preview</div>', unsafe_allow_html=True)
+
+        try:
+            preview_df = load_data(file_mtime)[0].copy()
+
+            if "ARPU" in preview_df.columns:
+                preview_df["ARPU"] = pd.to_numeric(preview_df["ARPU"], errors="coerce")
+                preview_df["ARPU_BUCKET"] = preview_df["ARPU"].apply(arpu_bucket)
+
+                arpu_preview = (
+                    preview_df.groupby("ARPU_BUCKET", dropna=False)
+                    .agg(Customers=("ACCOUNT NO", "count"))
+                    .reset_index()
+                )
+
+                if not arpu_preview.empty:
+                    fig_preview_pie = px.pie(
+                        arpu_preview,
+                        names="ARPU_BUCKET",
+                        values="Customers",
+                        title="ARPU Distribution Snapshot"
+                    )
+                    fig_preview_pie.update_layout(
+                        height=260,
+                        margin=dict(l=10, r=10, t=40, b=10),
+                        title_font=dict(size=14)
+                    )
+                    st.plotly_chart(fig_preview_pie, use_container_width=True)
+        except Exception:
+            st.info("Revenue mix preview will appear once source data is available.")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("")
+
+    # Centered login card with narrower field area
+    left_spacer, login_col, right_spacer = st.columns([1.15, 0.85, 1.15])
+
+    with login_col:
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">🔐 Secure Login</div>', unsafe_allow_html=True)
+        st.markdown('<div class="small-note">Sign in to access role-based dashboards and actionable reporting views.</div>', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        user_id = st.text_input("👤 Username", placeholder="Enter your username")
+        password = st.text_input("🔑 Password", type="password", placeholder="Enter your password")
+
+        login_clicked = st.button("Login")
+
+        if login_clicked:
+            access_df = load_access_master()
+
+            user_match = access_df[
+                (access_df["Username"].astype(str).str.strip() == str(user_id).strip()) &
+                (access_df["Password"].astype(str).str.strip() == str(password).strip())
+            ]
+
+            if not user_match.empty:
+                row = user_match.iloc[0]
+                st.session_state["logged_in"] = True
+                st.session_state["user_id"] = row["UserID"]
+                st.session_state["username"] = row["Username"]
+                st.session_state["role"] = row["Role"]
+                st.session_state["region_city"] = row["Region/City"]
+                st.session_state["designation"] = row["Designation"] if "Designation" in row.index else row["Role"]
+                st.success(f"Welcome, {row['UserID']}!")
+                st.rerun()
+            else:
+                st.error("Invalid username or password.")
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # --------------------------------------------------
 # Cached Data Loader
