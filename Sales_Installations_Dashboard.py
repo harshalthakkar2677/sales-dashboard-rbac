@@ -318,8 +318,8 @@ def login_page():
     )
 
     # Hero banner
-    if os.path.exists("telecom_analytics_banner.png"):
-        st.image("login_banner.png", use_container_width=True)
+    if os.path.exists("login_banner.png"):
+        st.image("telecom_analytics_banner.png", use_container_width=True)
 
     st.markdown("")
 
