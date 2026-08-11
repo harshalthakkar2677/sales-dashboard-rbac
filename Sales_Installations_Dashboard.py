@@ -149,8 +149,6 @@ with col2:
 # Refresh Control
 # --------------------------------------------------
 
-
-
 refresh_col1, refresh_col2 = st.columns([1, 5])
 with refresh_col1:
     if st.button("🔄 Refresh Data"):
@@ -289,6 +287,101 @@ def sort_month_df(df_in, month_col="MonthYear"):
         out = out.sort_values(f"{month_col}_dt")
     return out
     
+def inject_login_css():
+    st.markdown("""
+    <style>
+    .stApp {
+        background: #f7f9fc;
+    }
+
+    .main > div {
+        padding-top: 1rem;
+    }
+
+    .hero-title {
+        font-size: 34px;
+        font-weight: 800;
+        color: #1f3b57;
+        text-align: center;
+        margin-bottom: 0.2rem;
+    }
+
+    .hero-subtitle {
+        font-size: 15px;
+        color: #5f7387;
+        text-align: center;
+        margin-bottom: 1.2rem;
+    }
+
+    .login-card {
+        background: #ffffff;
+        padding: 22px 24px;
+        border-radius: 18px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+        border: 1px solid #dfe7f1;
+    }
+
+    .mini-card {
+        background: #ffffff;
+        padding: 14px 16px;
+        border-radius: 16px;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.05);
+        border: 1px solid #e5ecf3;
+        margin-top: 10px;
+    }
+
+    div[data-baseweb="input"] > div {
+        border-radius: 12px !important;
+        border: 1px solid #c9d6e2 !important;
+        min-height: 42px !important;
+        background-color: #ffffff !important;
+    }
+
+    input {
+        font-size: 14px !important;
+        color: #1f3b57 !important;
+    }
+
+    .stButton > button {
+        width: 100%;
+        border-radius: 12px;
+        height: 42px;
+        background: #0f6cbd;
+        color: white;
+        font-weight: 700;
+        border: none;
+    }
+
+    .stButton > button:hover {
+        background: #0c5ca3;
+    }
+
+    .section-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1f3b57;
+        margin-bottom: 0.4rem;
+    }
+
+    .small-note {
+        font-size: 12px;
+        color: #6b7f92;
+    }
+
+    .simple-hero-box {
+        background: #ffffff;
+        border: 1px solid #dde6ef;
+        border-radius: 18px;
+        padding: 18px;
+        text-align: center;
+        color: #35506b;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --------------------------------------------------
 # Access Control Helpers
@@ -317,30 +410,18 @@ def login_page():
         unsafe_allow_html=True
     )
 
-    # Hero banner
-    if os.path.exists("login_banner.png"):
-        st.markdown(
-    """
-    <div style="
-        background: linear-gradient(90deg, #eaf3fb 0%, #f8fbff 100%);
-        border: 1px solid #d9e6f2;
-        border-radius: 18px;
-        padding: 24px;
-        text-align: center;
-        margin-bottom: 10px;
-        color: #23415d;
-        font-size: 16px;
-        font-weight: 600;
-    ">
-        📡 Telecom Performance Intelligence • 📊 Sales Analytics • 🤖 Actionable Insights
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    st.markdown(
+        """
+        <div class="simple-hero-box">
+            📡 Telecom Performance Intelligence &nbsp;&nbsp;|&nbsp;&nbsp;
+            📊 Sales Analytics &nbsp;&nbsp;|&nbsp;&nbsp;
+            🎯 Actionable Leadership Insights
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-    st.markdown("")
-
-    # Mini dashboard preview section
+    # Preview section
     preview_col1, preview_col2 = st.columns([1.15, 1])
 
     with preview_col1:
@@ -348,9 +429,9 @@ def login_page():
         st.markdown('<div class="section-title">📈 Performance Preview</div>', unsafe_allow_html=True)
 
         try:
-            preview_df = load_data(file_mtime)[0].copy()
+            preview_df = df.copy() if "df" in globals() else None
 
-            if "INSTALLATION DATE" in preview_df.columns:
+            if preview_df is not None and not preview_df.empty and "INSTALLATION DATE" in preview_df.columns:
                 trend_df = (
                     preview_df.dropna(subset=["INSTALLATION DATE"])
                     .assign(Month=preview_df["INSTALLATION DATE"].dt.to_period("M").dt.to_timestamp())
@@ -375,8 +456,12 @@ def login_page():
                         title_font=dict(size=14)
                     )
                     st.plotly_chart(fig_preview_line, use_container_width=True)
+                else:
+                    st.info("Installation preview not available.")
+            else:
+                st.info("Installation preview not available.")
         except Exception:
-            st.info("Preview chart will appear once source data is available.")
+            st.info("Installation preview not available.")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -385,12 +470,9 @@ def login_page():
         st.markdown('<div class="section-title">🧩 Revenue Mix Preview</div>', unsafe_allow_html=True)
 
         try:
-            preview_df = load_data(file_mtime)[0].copy()
+            preview_df = df.copy() if "df" in globals() else None
 
-            if "ARPU" in preview_df.columns:
-                preview_df["ARPU"] = pd.to_numeric(preview_df["ARPU"], errors="coerce")
-                preview_df["ARPU_BUCKET"] = preview_df["ARPU"].apply(arpu_bucket)
-
+            if preview_df is not None and not preview_df.empty and "ARPU_BUCKET" in preview_df.columns:
                 arpu_preview = (
                     preview_df.groupby("ARPU_BUCKET", dropna=False)
                     .agg(Customers=("ACCOUNT NO", "count"))
@@ -410,32 +492,37 @@ def login_page():
                         title_font=dict(size=14)
                     )
                     st.plotly_chart(fig_preview_pie, use_container_width=True)
+                else:
+                    st.info("Revenue mix preview not available.")
+            else:
+                st.info("Revenue mix preview not available.")
         except Exception:
-            st.info("Revenue mix preview will appear once source data is available.")
+            st.info("Revenue mix preview not available.")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("")
 
-    # Centered login card with narrower field area
-    left_spacer, login_col, right_spacer = st.columns([1.15, 0.85, 1.15])
+    # Compact centered login card
+    left_spacer, login_col, right_spacer = st.columns([1.3, 0.8, 1.3])
 
     with login_col:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">🔐 Secure Login</div>', unsafe_allow_html=True)
-        st.markdown('<div class="small-note">Sign in to access role-based dashboards and actionable reporting views.</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="small-note">Sign in to access role-based dashboards and leadership insights.</div>',
+            unsafe_allow_html=True
+        )
         st.markdown("<br>", unsafe_allow_html=True)
 
-        user_id = st.text_input("👤 Username", placeholder="Enter your username")
+        username = st.text_input("👤 Username", placeholder="Enter your username")
         password = st.text_input("🔑 Password", type="password", placeholder="Enter your password")
 
         login_clicked = st.button("Login")
 
         if login_clicked:
-            access_df = load_access_master()
-
             user_match = access_df[
-                (access_df["Username"].astype(str).str.strip() == str(user_id).strip()) &
+                (access_df["Username"].astype(str).str.strip() == str(username).strip()) &
                 (access_df["Password"].astype(str).str.strip() == str(password).strip())
             ]
 
