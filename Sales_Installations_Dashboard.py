@@ -137,18 +137,7 @@ def validate_required_files():
         
 validate_required_files()
   
-# --------------------------------------------------
-# Header
-# --------------------------------------------------
-logo_path = LOGO_FILE
-
-col1, col2 = st.columns([1, 5])
-with col1:
-    if os.path.exists(logo_path):
-        st.image(logo_path, width=120)
-with col2:
-    st.markdown("#### Created By - Harshal Thakkar")
-    
+   
 # --------------------------------------------------
 # Refresh Control
 # --------------------------------------------------
@@ -418,11 +407,11 @@ def login_page():
 
     with col1:
         if os.path.exists(logo_path):
-            st.image(logo_path, width=90)
+            st.image(logo_path, width=120)
 
     with col2:
         st.markdown(
-            "<div style='text-align:right; color:#5f7387; font-size:14px; font-weight:600; margin-top:10px;'>Created By - Harshal Thakkar</div>",
+            "<div style='text-align:right; color:#5f7387; font-size:20px; font-weight:600; margin-top:10px;'>Created By - Harshal Thakkar</div>",
             unsafe_allow_html=True
         )
 
