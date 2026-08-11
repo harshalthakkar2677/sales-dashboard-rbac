@@ -457,9 +457,13 @@ def login_page():
         access_df = load_access_master()
         
         if login_clicked:
+            username_clean = str(username).strip()
+            password_clean = str(password).strip()
+            
             user_match = access_df[
-                (access_df["Username"].astype(str).str.strip() == str(username).strip()) &
-                (access_df["Password"].astype(str).str.strip() == str(password).strip())
+                (access_df["Username"].astype(str).str.strip() == username_clean) &
+                (access_df["Password"].astype(str).str.strip() == password_clean)
+             
             ]
 
             if not user_match.empty:
@@ -470,11 +474,11 @@ def login_page():
                 st.session_state["role"] = row["Role"]
                 st.session_state["region_city"] = row["Region/City"]
                 st.session_state["designation"] = row["Designation"] if "Designation" in row.index else row["Role"]
-                st.success(f"Welcome, {row['UserID']}!")
+                st.success(f"Welcome, {row['UserID']}! Redirecting...")
                 st.rerun()
             else:
                 st.error("Invalid username or password.")
-
+                st.write("Entered Username:", username_clean)
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
