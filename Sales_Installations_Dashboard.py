@@ -62,7 +62,7 @@ with col1:
 with col2:
     st.title("Sales & Installations Dashboard")
     st.markdown("#### Created By - Harshal Thakkar")
-    st.markdown("<h2 style='text-align:center;'>Track Performance. Predict Trends. Drive Growth</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:left;'>Track Performance. Predict Trends. Drive Growth</h2>", unsafe_allow_html=True)
 # --------------------------------------------------
 # Refresh Control
 # --------------------------------------------------
