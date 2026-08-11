@@ -29,7 +29,7 @@ def inject_login_css():
         font-weight: 800;
         color: #1f3b57;
         text-align: center;
-        margin-top: -6px;
+        margin-top: -12px;
         margin-bottom: 0.1rem;
     }
 
@@ -744,7 +744,7 @@ st.sidebar.header("Filters")
 
 st.sidebar.markdown("### User Access")
 st.sidebar.write(f"👤 {st.session_state.get('userid', '')}")
-st.sidebar.write(f"Role: {st.session_state.get('role', '')}")
+st.sidebar.write(f"Designation: {st.session_state.get('designation', '')}")
 st.sidebar.write(f"Access Scope: {st.session_state.get('region_city', '')}")
 
 if st.sidebar.button("Logout"):
