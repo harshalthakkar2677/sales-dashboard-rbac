@@ -307,7 +307,7 @@ def inject_login_css():
         font-weight: 800;
         color: #1f3b57;
         text-align: center;
-        margin-top: -10px;
+        margin-top: -18px;
         margin-bottom: 0.1rem;
     }
 
@@ -380,7 +380,7 @@ def inject_login_css():
     }
 
     .login-wrap {
-        margin-top: -4px;
+        margin-top: -10px;
     }
     </style>
     """, unsafe_allow_html=True)
