@@ -293,7 +293,7 @@ def inject_login_css():
     }
 
     .main > div {
-        padding-top: 1rem;
+        padding-top: 0.3rem;
     }
 
     .hero-title {
@@ -301,37 +301,54 @@ def inject_login_css():
         font-weight: 800;
         color: #1f3b57;
         text-align: center;
-        margin-bottom: 0.2rem;
+        margin-bottom: 0.15rem;
+        margin-top: -8px;
     }
 
     .hero-subtitle {
         font-size: 15px;
         color: #5f7387;
         text-align: center;
-        margin-bottom: 1.2rem;
+        margin-bottom: 0.7rem;
     }
 
     .login-card {
         background: #ffffff;
-        padding: 22px 24px;
+        padding: 20px 22px;
         border-radius: 18px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.06);
         border: 1px solid #dfe7f1;
+        margin-top: -6px;
     }
 
     .mini-card {
         background: #ffffff;
-        padding: 14px 16px;
+        padding: 12px 14px;
         border-radius: 16px;
         box-shadow: 0 6px 16px rgba(0,0,0,0.05);
         border: 1px solid #e5ecf3;
-        margin-top: 10px;
+        margin-top: 4px;
+    }
+
+    .placeholder-card {
+        background: #f9fbfe;
+        border: 1px dashed #c9d8e8;
+        border-radius: 14px;
+        height: 260px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: #6a8094;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.6;
     }
 
     div[data-baseweb="input"] > div {
         border-radius: 12px !important;
         border: 1px solid #c9d6e2 !important;
-        min-height: 42px !important;
+        min-height: 40px !important;
         background-color: #ffffff !important;
     }
 
@@ -343,7 +360,7 @@ def inject_login_css():
     .stButton > button {
         width: 100%;
         border-radius: 12px;
-        height: 42px;
+        height: 40px;
         background: #0f6cbd;
         color: white;
         font-weight: 700;
@@ -358,7 +375,7 @@ def inject_login_css():
         font-size: 18px;
         font-weight: 700;
         color: #1f3b57;
-        margin-bottom: 0.4rem;
+        margin-bottom: 0.35rem;
     }
 
     .small-note {
@@ -370,16 +387,21 @@ def inject_login_css():
         background: #ffffff;
         border: 1px solid #dde6ef;
         border-radius: 18px;
-        padding: 18px;
+        padding: 14px 16px;
         text-align: center;
         color: #35506b;
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 600;
-        margin-bottom: 10px;
+        margin-bottom: 6px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+    }
+
+    .login-wrap {
+        margin-top: -8px;
     }
     </style>
     """, unsafe_allow_html=True)
+
 
 # --------------------------------------------------
 # Access Control Helpers
@@ -449,17 +471,41 @@ def login_page():
                         title="Last 6 Months Installation Trend"
                     )
                     fig_preview_line.update_layout(
-                        height=260,
-                        margin=dict(l=10, r=10, t=40, b=10),
+                        height=240,
+                        margin=dict(l=10, r=10, t=35, b=10),
                         title_font=dict(size=14)
                     )
                     st.plotly_chart(fig_preview_line, use_container_width=True)
                 else:
-                    st.info("Installation preview not available.")
+                    st.markdown(
+                        """
+                        <div class="placeholder-card">
+                            📈 Trend Preview Placeholder<br>
+                            Light business chart visual area
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
             else:
-                st.info("Installation preview not available.")
+                st.markdown(
+                    """
+                    <div class="placeholder-card">
+                        📈 Trend Preview Placeholder<br>
+                        Light business chart visual area
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
         except Exception:
-            st.info("Installation preview not available.")
+            st.markdown(
+                """
+                <div class="placeholder-card">
+                    📈 Trend Preview Placeholder<br>
+                    Light business chart visual area
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -467,44 +513,23 @@ def login_page():
         st.markdown('<div class="mini-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">🧩 Revenue Mix Preview</div>', unsafe_allow_html=True)
 
-        try:
-            preview_df = df.copy() if "df" in globals() else None
-
-            if preview_df is not None and not preview_df.empty and "ARPU_BUCKET" in preview_df.columns:
-                arpu_preview = (
-                    preview_df.groupby("ARPU_BUCKET", dropna=False)
-                    .agg(Customers=("ACCOUNT NO", "count"))
-                    .reset_index()
-                )
-
-                if not arpu_preview.empty:
-                    fig_preview_pie = px.pie(
-                        arpu_preview,
-                        names="ARPU_BUCKET",
-                        values="Customers",
-                        title="ARPU Distribution Snapshot"
-                    )
-                    fig_preview_pie.update_layout(
-                        height=260,
-                        margin=dict(l=10, r=10, t=40, b=10),
-                        title_font=dict(size=14)
-                    )
-                    st.plotly_chart(fig_preview_pie, use_container_width=True)
-                else:
-                    st.info("Revenue mix preview not available.")
-            else:
-                st.info("Revenue mix preview not available.")
-        except Exception:
-            st.info("Revenue mix preview not available.")
+        st.markdown(
+            """
+            <div class="placeholder-card">
+                🧩 Revenue Mix Placeholder<br>
+                ARPU • Validity • Value mix visual
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown("")
-
-    # Compact centered login card
-    left_spacer, login_col, right_spacer = st.columns([1.3, 0.8, 1.3])
+    # Login card moved upward and closer to preview row
+    left_spacer, login_col, right_spacer = st.columns([1.25, 0.9, 1.25])
 
     with login_col:
+        st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">🔐 Secure Login</div>', unsafe_allow_html=True)
         st.markdown(
@@ -538,6 +563,8 @@ def login_page():
                 st.error("Invalid username or password.")
 
         st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
 
 # --------------------------------------------------
 # Cached Data Loader
