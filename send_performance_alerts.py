@@ -636,6 +636,27 @@ def build_ageing_summary(exec_summary):
         ageing_summary["Employee_Count"] / ageing_summary["Total_Employees"] * 100
     ).round(0)
 
+    ageing_order = {
+        "Less Than 3 Months": 1,
+        "4-12 Months": 2,
+        "Above 12 Months": 3,
+        "Missing": 4
+    }
+    expectation_order = {
+        "Below Expectations": 1,
+        "Meeting Expectations": 2,
+        "Exceptional": 3,
+        "Missing": 4
+    }
+
+    ageing_summary["Ageing_Sort"] = ageing_summary["Exec_Ageing_Bucket"].map(ageing_order)
+    ageing_summary["Expectation_Sort"] = ageing_summary["Expectation_Status"].map(expectation_order)
+
+    ageing_summary = ageing_summary.sort_values(
+        ["Ageing_Sort", "Expectation_Sort"],
+        ascending=[True, True]
+    ).drop(columns=["Ageing_Sort", "Expectation_Sort"])
+
     return ageing_summary
 
 # --------------------------------------------------
@@ -777,7 +798,7 @@ def build_exec_narrative(exec_summary, period_label):
     return (
         f"For {period_label}, there are {total_execs} active Sales executives in scope. "
         f"{below_execs} are below expectations, {meeting_execs} are on track, and {exceptional_execs} are exceptional. "
-        f"The highest concentration of underperformance is in {top_below_bucket} bucket and most visible in {top_below_city} employee city."
+        f"The highest concentration of underperformance is in {top_below_bucket} bucket and most visible in {top_below_city} city."
     )
 
 def build_node_narrative(node_summary, period_label):
@@ -844,6 +865,13 @@ def build_report_pack(scoped_perf_df, scoped_action_df, mode="weekly", periods_p
         current_action_df = periods_action["weekly_df"].copy()
 
         period_label = f"{periods_perf['current_slab']} ({periods_perf['current_start'].date()} to {periods_perf['current_end'].date()})"
+        current_label = period_label
+
+        if periods_perf["previous_month_start"] is not None:
+            prev_start, prev_end = get_slab_date_range(periods_perf["previous_month_start"], periods_perf["current_slab"])
+            previous_label = f"{periods_perf['current_slab']} ({prev_start.date()} to {prev_end.date()})"
+        else:
+            previous_label = "Previous Comparable Period"
 
     elif mode == "fortnightly":
         current_perf_df = periods_perf["fortnight_df"].copy()
@@ -852,6 +880,8 @@ def build_report_pack(scoped_perf_df, scoped_action_df, mode="weekly", periods_p
         current_action_df = periods_action["fortnight_df"].copy()
 
         period_label = f"{'1st-15th' if periods_perf['latest_date'].day <= 15 else '16th-Month End'} of {periods_perf['latest_month_start'].strftime('%b-%Y')}"
+        current_label = period_label
+        previous_label = periods_perf["previous_month_start"].strftime("%b-%y") if periods_perf["previous_month_start"] is not None else "Previous Month"
 
     else:
         current_perf_df = periods_perf["monthly_df"].copy()
@@ -860,13 +890,13 @@ def build_report_pack(scoped_perf_df, scoped_action_df, mode="weekly", periods_p
         current_action_df = periods_action["monthly_df"].copy()
 
         period_label = periods_perf["latest_month_start"].strftime("%b-%Y") if periods_perf["latest_month_start"] is not None else "Monthly"
+        current_label = periods_perf["latest_month_start"].strftime("%b-%y") if periods_perf["latest_month_start"] is not None else "Current Month"
+        previous_label = periods_perf["previous_month_start"].strftime("%b-%y") if periods_perf["previous_month_start"] is not None else "Previous Month"
 
-    # PERFORMANCE summaries from full scoped performance df
     node_summary = build_node_summary(current_perf_df)
     plan_summary = build_plan_mix_summary(current_perf_df)
     month_comparison = build_month_comparison(current_perf_df, previous_perf_df)
 
-    # ACTIONABLE summaries from active sales only
     exec_summary = build_exec_summary(current_action_df)
     ageing_summary = build_ageing_summary(exec_summary)
     underperformers = build_underperformers(exec_summary)
@@ -880,6 +910,8 @@ def build_report_pack(scoped_perf_df, scoped_action_df, mode="weekly", periods_p
 
     return {
         "period_label": period_label,
+        "current_label": current_label,
+        "previous_label": previous_label,
         "current_perf_df": current_perf_df,
         "previous_perf_df": previous_perf_df,
         "current_action_df": current_action_df,
@@ -897,19 +929,62 @@ def build_report_pack(scoped_perf_df, scoped_action_df, mode="weekly", periods_p
 # --------------------------------------------------
 def df_to_html(df, max_rows=15):
     if df is None or df.empty:
-        return "<p>No data available.</p>"
+        return '<p style="font-size:12px;">No data available.</p>'
 
-    return (
-        df.head(max_rows)
-        .fillna("")
-        .to_html(index=False, border=1, justify="left")
+    out = df.head(max_rows).copy().fillna("")
+
+    html = out.to_html(index=False, border=0, justify="center")
+
+    html = html.replace(
+        '<table class="dataframe">',
+        '<table style="border-collapse:collapse;width:auto;max-width:100%;font-size:11px;border:2px solid #c00000;table-layout:auto;">'
     )
+    html = html.replace(
+        '<table border="1" class="dataframe">',
+        '<table style="border-collapse:collapse;width:auto;max-width:100%;font-size:11px;border:2px solid #c00000;table-layout:auto;">'
+    )
+    html = html.replace(
+        '<thead>',
+        '<thead style="background-color:#c00000;color:white;text-align:center;">'
+    )
+    html = html.replace(
+        '<th>',
+        '<th style="padding:3px 6px;border:1px solid #c00000;text-align:center;white-space:nowrap;">'
+    )
+    html = html.replace(
+        '<td>',
+        '<td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:center;white-space:nowrap;">'
+    )
+
+    return html
+
 
 def format_exec_summary_for_mail(exec_summary):
     if exec_summary.empty:
         return exec_summary
 
     out = exec_summary.copy()
+
+    expectation_order = {
+        "Below Expectations": 1,
+        "Meeting Expectations": 2,
+        "Exceptional": 3,
+        "Missing": 4
+    }
+    out["Expectation_Sort"] = out["Expectation_Status"].map(expectation_order)
+
+    out = out.sort_values(
+        ["Expectation_Sort", "Target_Gap", "Total"],
+        ascending=[True, True, False]
+    ).drop(columns=["Expectation_Sort"])
+
+    out["Value"] = out["Value"].apply(format_inr_0)
+    out["Avg_Month_Value"] = out["Avg_Month_Value"].apply(format_inr_0)
+    out["Avg_Plan_Value_Per_Sale"] = out["Avg_Plan_Value_Per_Sale"].apply(format_inr_0)
+    out["Avg_Month_Count"] = out["Avg_Month_Count"].round(0).apply(format_num_0)
+    out["Target_Avg_Month"] = out["Target_Avg_Month"].round(0).apply(format_num_0)
+    out["Target_Gap"] = out["Target_Gap"].round(0).apply(format_num_0)
+
     return out[[
         "EXEC_NAME_FINAL", "EXEC_CITY_FINAL", "Exec_Ageing_Bucket",
         "Installation", "Winback", "Total", "Value",
@@ -919,11 +994,11 @@ def format_exec_summary_for_mail(exec_summary):
         "EXEC_NAME_FINAL": "Executive",
         "EXEC_CITY_FINAL": "Employee City",
         "Exec_Ageing_Bucket": "Ageing Bucket",
-        "Value": "Total Value",
+        "Value": "₹ Total Value",
         "Avg_Month_Count": "Avg/Month Count",
         "Target_Avg_Month": "Target Avg/Month",
         "Target_Gap": "Target Gap",
-        "Avg_Plan_Value_Per_Sale": "Avg Plan Value/Sale",
+        "Avg_Plan_Value_Per_Sale": "₹ Avg Plan Value/Sale",
         "Expectation_Status": "Expectation"
     })
 
@@ -932,6 +1007,13 @@ def format_underperformers_for_mail(alerts):
         return alerts
 
     out = alerts.copy()
+    out = out.sort_values(["Target_Gap", "Total"], ascending=[True, False])
+
+    out["Avg_Month_Count"] = out["Avg_Month_Count"].round(0).apply(format_num_0)
+    out["Target_Avg_Month"] = out["Target_Avg_Month"].round(0).apply(format_num_0)
+    out["Target_Gap"] = out["Target_Gap"].round(0).apply(format_num_0)
+    out["Avg_Plan_Value_Per_Sale"] = out["Avg_Plan_Value_Per_Sale"].apply(format_inr_0)
+
     return out[[
         "EXEC_NAME_FINAL", "EXEC_CITY_FINAL", "Exec_Ageing_Bucket",
         "Installation", "Winback", "Total",
@@ -944,7 +1026,7 @@ def format_underperformers_for_mail(alerts):
         "Avg_Month_Count": "Avg/Month Count",
         "Target_Avg_Month": "Target Avg/Month",
         "Target_Gap": "Target Gap",
-        "Avg_Plan_Value_Per_Sale": "Avg Plan Value/Sale",
+        "Avg_Plan_Value_Per_Sale": "₹ Avg Plan Value/Sale",
         "Recommended_Action": "Recommended Action"
     })
 
@@ -953,12 +1035,17 @@ def format_node_summary_for_mail(node_summary):
         return node_summary
 
     out = node_summary.copy()
+    out = out.sort_values(["Value", "Total"], ascending=[False, False])
+
+    out["Value"] = out["Value"].apply(format_inr_0)
+    out["Avg_Value_Per_Sale"] = out["Avg_Value_Per_Sale"].apply(format_inr_0)
+
     return out[[
         "City", "INSTALLATION NODE", "Installation", "Winback", "Total", "Value", "Avg_Value_Per_Sale"
     ]].rename(columns={
         "INSTALLATION NODE": "Node",
-        "Value": "Total Value",
-        "Avg_Value_Per_Sale": "Avg Value/Sale"
+        "Value": "₹ Total Value",
+        "Avg_Value_Per_Sale": "₹ Avg Value/Sale"
     })
 
 def format_plan_summary_for_mail(plan_summary):
@@ -966,70 +1053,121 @@ def format_plan_summary_for_mail(plan_summary):
         return plan_summary
 
     out = plan_summary.copy()
+
+    arpu_order = {
+        "751+": 1,
+        "501-750": 2,
+        "301-500": 3,
+        "upto 300": 4,
+        "Missing": 5
+    }
+
+    out["ARPU_Sort"] = out["ARPU_BUCKET"].map(arpu_order)
+    out = out.sort_values(["ARPU_Sort", "Value", "Count"], ascending=[True, False, False]).drop(columns=["ARPU_Sort"])
+
+    out["Value"] = out["Value"].apply(format_inr_0)
+    out["Avg_Plan_Value_Per_Sale"] = out["Avg_Plan_Value_Per_Sale"].apply(format_inr_0)
+
     return out[[
         "ARPU_BUCKET", "VALIDITY In Months", "SPEED (Mbps)", "Count", "Value", "Avg_Plan_Value_Per_Sale"
     ]].rename(columns={
         "ARPU_BUCKET": "ARPU Bucket",
-        "Value": "Total Value",
-        "Avg_Plan_Value_Per_Sale": "Avg Plan Value/Sale"
+        "Value": "₹ Total Value",
+        "Avg_Plan_Value_Per_Sale": "₹ Avg Plan Value/Sale"
     })
+def format_inr_0(x):
+    if pd.isna(x):
+        return "₹0"
+    try:
+        return f"₹{round(float(x), 0):,.0f}"
+    except:
+        return x
+
+def format_num_0(x):
+    if pd.isna(x):
+        return "0"
+    try:
+        return f"{round(float(x), 0):,.0f}"
+    except:
+        return x
+
+def color_delta_html(val):
+    try:
+        v = float(val)
+        if v > 0:
+            return f'<span style="color:green;font-weight:bold;">{v:,.0f}</span>'
+        elif v < 0:
+            return f'<span style="color:red;font-weight:bold;">{v:,.0f}</span>'
+        else:
+            return f'<span style="color:#444;">{v:,.0f}</span>'
+    except:
+        return str(val)
+
+def color_text_html(text):
+    text = str(text)
+    if "Below" in text or "Alert" in text or "Intervention" in text:
+        return f'<span style="color:red;font-weight:bold;">{text}</span>'
+    elif "Exceptional" in text or "On Track" in text or "Meeting" in text:
+        return f'<span style="color:green;font-weight:bold;">{text}</span>'
+    return text
 
 # --------------------------------------------------
 # KPI Summary HTML
 # --------------------------------------------------
-def build_kpi_html(month_comparison):
+def build_kpi_html(month_comparison, current_label="Current Period", previous_label="Previous Period"):
     curr = month_comparison["Current"]
     prev = month_comparison["Previous"]
 
     html = f"""
-    <h3>Performance Snapshot</h3>
-    <table border="1" cellpadding="6" cellspacing="0">
-        <tr>
-            <th>Metric</th>
-            <th>Current Period</th>
-            <th>Previous Month</th>
-            <th>Delta</th>
+    <h3 style="color:#c00000;font-size:14px;margin-bottom:6px;">📊 Performance Snapshot</h3>
+    <table style="border-collapse:collapse;width:auto;max-width:100%;font-size:11px;border:2px solid #c00000;table-layout:auto;">
+        <tr style="background-color:#c00000;color:white;">
+            <th style="padding:3px 6px;border:1px solid #c00000;text-align:center;white-space:nowrap;">Metric</th>
+            <th style="padding:3px 6px;border:1px solid #c00000;text-align:center;white-space:nowrap;">{current_label}</th>
+            <th style="padding:3px 6px;border:1px solid #c00000;text-align:center;white-space:nowrap;">{previous_label}</th>
+            <th style="padding:3px 6px;border:1px solid #c00000;text-align:center;white-space:nowrap;">Delta</th>
         </tr>
         <tr>
-            <td>Installation</td>
-            <td>{curr['Installation']}</td>
-            <td>{prev['Installation']}</td>
-            <td>{curr['Installation'] - prev['Installation']}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">🔧 Installation</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_num_0(curr['Installation'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_num_0(prev['Installation'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{color_delta_html(curr['Installation'] - prev['Installation'])}</td>
         </tr>
         <tr>
-            <td>Winback</td>
-            <td>{curr['Winback']}</td>
-            <td>{prev['Winback']}</td>
-            <td>{curr['Winback'] - prev['Winback']}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">🔁 Winback</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_num_0(curr['Winback'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_num_0(prev['Winback'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{color_delta_html(curr['Winback'] - prev['Winback'])}</td>
         </tr>
         <tr>
-            <td>Total Count</td>
-            <td>{curr['Total']}</td>
-            <td>{prev['Total']}</td>
-            <td>{month_comparison['Delta_Total']}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">📦 Total Count</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_num_0(curr['Total'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_num_0(prev['Total'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{color_delta_html(month_comparison['Delta_Total'])}</td>
         </tr>
         <tr>
-            <td>Total Value</td>
-            <td>{format_currency(curr['Value'])}</td>
-            <td>{format_currency(prev['Value'])}</td>
-            <td>{format_currency(month_comparison['Delta_Value'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">💰 Total Value</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_inr_0(curr['Value'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_inr_0(prev['Value'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{color_delta_html(month_comparison['Delta_Value'])}</td>
         </tr>
         <tr>
-            <td>Avg Plan Value/Sale</td>
-            <td>{format_currency(curr['Avg_Plan_Value'])}</td>
-            <td>{format_currency(prev['Avg_Plan_Value'])}</td>
-            <td>{format_currency(month_comparison['Delta_Avg_Plan_Value'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">🏷️ Avg Plan Value/Sale</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_inr_0(curr['Avg_Plan_Value'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{format_inr_0(prev['Avg_Plan_Value'])}</td>
+            <td style="padding:3px 6px;border:1px solid #ddd;text-align:center;white-space:nowrap;">{color_delta_html(month_comparison['Delta_Avg_Plan_Value'])}</td>
         </tr>
     </table>
     """
     return html
 
+
 # --------------------------------------------------
 # Email Body Builder
 # --------------------------------------------------
 def build_email_body(user_row, report_pack, mode):
+    username = user_row["UserID"]
     role = user_row["Role"]
-    username = user_row["Username"]
     period_label = report_pack["period_label"]
 
     exec_summary = format_exec_summary_for_mail(report_pack["exec_summary"])
@@ -1038,55 +1176,61 @@ def build_email_body(user_row, report_pack, mode):
     plan_summary = format_plan_summary_for_mail(report_pack["plan_summary"])
     ageing_summary = report_pack["ageing_summary"]
 
-    kpi_html = build_kpi_html(report_pack["month_comparison"])
+    kpi_html = build_kpi_html(
+        report_pack["month_comparison"],
+        current_label=report_pack.get("current_label", "Current Period"),
+        previous_label=report_pack.get("previous_label", "Previous Period")
+    )
 
     html = f"""
     <html>
-    <body>
+    <body style="font-family:Arial, sans-serif; font-size:12px; color:#222;">
         <p>Dear {username},</p>
 
         <p>Please find below the <b>{mode.title()}</b> Sales Performance Review for <b>{period_label}</b>.</p>
 
-        <h2>{role} Performance Review - {period_label}</h2>
+        <h2 style="color:#c00000; border-bottom:2px solid #c00000; padding-bottom:4px;">
+            📬 {role} Performance Review - {period_label}
+        </h2>
 
         {kpi_html}
 
-        <h3>Executive Performance Narrative</h3>
+        <h3 style="color:#c00000;">👔 Executive Performance Narrative</h3>
         <p>{report_pack['narratives']['exec']}</p>
 
-        <h3>Node Performance Narrative</h3>
+        <h3 style="color:#c00000;">📍 Node Performance Narrative</h3>
         <p>{report_pack['narratives']['node']}</p>
 
-        <h3>Plan / Revenue Quality Narrative</h3>
+        <h3 style="color:#c00000;">📶 Plan / Revenue Quality Narrative</h3>
         <p>{report_pack['narratives']['plan']}</p>
 
-        <h3>Alert Narrative</h3>
-        <p>{report_pack['narratives']['alert']}</p>
+        <h3 style="color:#c00000;">🚨 Alert Narrative</h3>
+        <p style="color:red;">{report_pack['narratives']['alert']}</p>
 
-        <h3>Executive Summary</h3>
+        <h3 style="color:#c00000;">📋 Executive Summary</h3>
         {df_to_html(exec_summary, max_rows=20)}
 
-        <h3>Ageing Summary</h3>
+        <h3 style="color:#c00000;">⏳ Ageing Summary</h3>
         {df_to_html(ageing_summary, max_rows=20)}
 
-        <h3>Top Node Summary</h3>
+        <h3 style="color:#c00000;">🧭 Node Summary</h3>
         {df_to_html(node_summary, max_rows=15)}
 
-        <h3>Plan Selling Pattern Summary</h3>
+        <h3 style="color:#c00000;">📊 Plan Selling Pattern Summary</h3>
         {df_to_html(plan_summary, max_rows=15)}
 
-        <h3>Underperformer Detail</h3>
+        <h3 style="color:#c00000;">🚩 Underperformer Detail</h3>
         {df_to_html(underperformers, max_rows=20)}
 
-        <p><b>Suggested Leadership Actions</b></p>
-        <ul>
-            <li>Coach executives below target on validity and ARPU mix.</li>
+        <p><b style="color:#c00000;">Recommended Leadership Actions</b></p>
+        <ul style="font-size:12px;">
+            <li><span style="color:red;">Coach executives below target</span> on validity and ARPU mix.</li>
             <li>Review employee-city productivity for persistently weak territories.</li>
-            <li>Scale playbooks from exceptional performers across similar ageing buckets.</li>
+            <li><span style="color:green;">Scale practices from exceptional performers</span> across similar ageing buckets.</li>
             <li>Investigate high-count but low-value nodes for upsell intervention.</li>
         </ul>
 
-        <p>Regards,<br>Sales Performance Automation</p>
+        <p>Regards,<br><b>Sales Performance Automation</b></p>
     </body>
     </html>
     """
@@ -1096,16 +1240,13 @@ def build_email_body(user_row, report_pack, mode):
 # Subject Builder
 # --------------------------------------------------
 def build_email_subject(user_row, report_pack, mode):
-    role = user_row["UserID"]
+    role = user_row["Role"]
     region_city = user_row["Region/City"]
     period_label = report_pack["period_label"]
 
-    if role == "Manager":
-        scope = "ALL"
-    else:
-        scope = region_city
+    scope = "ALL" if "manager" in str(role).strip().lower() else region_city
 
-    return f"{mode.title()} Sales Performance Review | {role} | {scope} | {period_label}"
+    return f"📊 {mode.title()} Sales Performance Review | {role} | {scope} | {period_label}"
 
 # --------------------------------------------------
 # SMTP Send Function

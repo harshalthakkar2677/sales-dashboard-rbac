@@ -1029,7 +1029,7 @@ def build_kpi_html(month_comparison):
 # --------------------------------------------------
 def build_email_body(user_row, report_pack, mode):
     role = user_row["Role"]
-    username = user_row["Username"]
+    username = user_row["UserID"]
     period_label = report_pack["period_label"]
 
     exec_summary = format_exec_summary_for_mail(report_pack["exec_summary"])
