@@ -959,10 +959,11 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Operations & Executive",
     "Customer Profiling",
     "CEO & Sales Head",
-    "Actionable Insights"
+    "Actionable Insights",
     "CPS / CAC",
     "Incentive Leakage Analysis"
 ])
+
 ## Part 2 of 4
 
 # ==================================================
