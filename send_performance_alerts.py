@@ -9,6 +9,7 @@ import calendar
 import tempfile
 from email.mime.base import MIMEBase
 from email import encoders
+from sales_cac_utils import calculate_payouts
 
 # --------------------------------------------------
 # File Paths
@@ -16,6 +17,7 @@ from email import encoders
 DATA_FILE = "New Registration Report.csv"
 WINBACK_FILE = "New Winback Report.csv"
 ACCESS_FILE = "Access Master.xlsx"
+CTC_FILE = "TSE-ACTIVE-CTC-31 Jul 2026.csv"
 
 # --------------------------------------------------
 # SMTP Configuration - UPDATE THESE
@@ -133,6 +135,37 @@ def safe_divide(a, b):
     if b in [0, None] or pd.isna(b):
         return 0
     return a / b
+    
+def classify_cps(cac):
+    if pd.isna(cac):
+        return "Missing"
+    if cac < 1800:
+        return "Good"
+    elif cac <= 2200:
+        return "Needs Improvement"
+    return "Alarming"
+
+def incentive_status(variable_payout):
+    if pd.isna(variable_payout) or variable_payout <= 0:
+        return "No Incentive"
+    return "Incentive Earned"
+
+def recommendation_from_row(row):
+    installs = row.get("Installs", 0)
+    total = row.get("Total_Activations", 0)
+    scheme = str(row.get("SCHEME", "")).upper()
+    variable = row.get("Variable_Payout", 0)
+
+    if installs < 8:
+        return "Increase new installs to minimum 8."
+    if scheme == "LFHV" and total < 12:
+        return "Increase total activations to at least 12."
+    if scheme == "HFLV" and total < 13:
+        return "Increase total activations to at least 13."
+    if variable <= 0:
+        return "Improve plan mix toward higher-yield / flat payout eligible plans."
+    return "Maintain run-rate and improve plan quality."
+
 
 # --------------------------------------------------
 # Load Access Master
@@ -402,6 +435,31 @@ inst_df, winback_df, combined_df, emp_master = build_master_dataset()
 perf_df = build_performance_base(combined_df)
 action_df = build_actionable_base(combined_df)
 
+# --------------------------------------------------
+# CPS / CAC Data
+# --------------------------------------------------
+monthly_cac, detail_rows = calculate_payouts(
+    sales_file=DATA_FILE,
+    wb_file=WINBACK_FILE,
+    ctc_file=CTC_FILE
+)
+
+monthly_cac["City"] = monthly_cac["City"].astype(str).str.strip()
+monthly_cac["MonthYear"] = monthly_cac["MonthYear"].astype(str).str.strip()
+monthly_cac["Name"] = monthly_cac["Name"].astype(str).str.strip()
+
+detail_rows["City"] = detail_rows["City"].astype(str).str.strip()
+detail_rows["MonthYear"] = detail_rows["MonthYear"].astype(str).str.strip()
+detail_rows["Name"] = detail_rows["Name"].astype(str).str.strip()
+
+monthly_cac["CPS Category"] = monthly_cac["CAC"].apply(classify_cps)
+monthly_cac["Incentive Status"] = monthly_cac["Variable_Payout"].apply(incentive_status)
+monthly_cac["Recommendation"] = monthly_cac.apply(recommendation_from_row, axis=1)
+monthly_cac["Payout_per_Activation"] = (
+    monthly_cac["Variable_Payout"] / monthly_cac["Total_Activations"].replace(0, pd.NA)
+).fillna(0).round(0)
+
+
 print("\n=== PERFORMANCE DF VALIDATION ===")
 print("Performance rows:", len(perf_df))
 print("Performance columns:", perf_df.columns.tolist())
@@ -553,6 +611,14 @@ def apply_scope_filter(df, role, region_city):
     if role == "Regional Lead":
         allowed_cities = [x.strip() for x in str(region_city).split(",") if x.strip()]
         out = out[out["EXEC_CITY_FINAL"].isin(allowed_cities)]
+
+    return out
+def apply_cps_scope_filter(cps_df, role, region_city):
+    out = cps_df.copy()
+
+    if role == "Regional Lead":
+        allowed_cities = [x.strip() for x in str(region_city).split(",") if x.strip()]
+        out = out[out["City"].isin(allowed_cities)]
 
     return out
 
@@ -923,6 +989,114 @@ def build_report_pack(scoped_perf_df, scoped_action_df, mode="weekly", periods_p
         "month_comparison": month_comparison,
         "narratives": narratives
     }
+    
+def build_cps_mail_pack(cps_df):
+    if cps_df.empty:
+        return {
+            "city_cps": pd.DataFrame(),
+            "category_summary": pd.DataFrame(),
+            "incentive_summary": pd.DataFrame(),
+            "high_cps": pd.DataFrame(),
+            "needs_improvement": pd.DataFrame(),
+            "no_incentive": pd.DataFrame(),
+            "below_install_gate": pd.DataFrame(),
+            "below_total_gate": pd.DataFrame(),
+            "low_yield": pd.DataFrame(),
+            "leakage_summary": pd.DataFrame()
+        }
+
+    city_cps = cps_df.groupby("City", as_index=False).agg(
+        Executives=("EMP Code", "nunique"),
+        Total_Activations=("Total_Activations", "sum"),
+        Total_Payout=("Total_Payout", "sum")
+    )
+    city_cps["CAC"] = (
+        city_cps["Total_Payout"] / city_cps["Total_Activations"].replace(0, pd.NA)
+    ).fillna(0).round(0)
+    city_cps["CPS Category"] = city_cps["CAC"].apply(classify_cps)
+
+    category_emp = cps_df[["EMP Code", "CPS Category"]].drop_duplicates()
+    category_summary = category_emp.groupby("CPS Category", as_index=False).agg(
+        Employees=("EMP Code", "nunique")
+    )
+    category_value = cps_df.groupby("CPS Category", as_index=False).agg(
+        Total_Activations=("Total_Activations", "sum"),
+        Total_Payout=("Total_Payout", "sum")
+    )
+    category_summary = category_summary.merge(category_value, on="CPS Category", how="left")
+    category_summary["Avg CPS"] = (
+        category_summary["Total_Payout"] / category_summary["Total_Activations"].replace(0, pd.NA)
+    ).fillna(0).round(0)
+
+    incentive_emp = cps_df[["EMP Code", "Incentive Status"]].drop_duplicates()
+    incentive_summary = incentive_emp.groupby("Incentive Status", as_index=False).agg(
+        Employees=("EMP Code", "nunique")
+    )
+    incentive_value = cps_df.groupby("Incentive Status", as_index=False).agg(
+        Total_Activations=("Total_Activations", "sum"),
+        Total_Payout=("Total_Payout", "sum")
+    )
+    incentive_summary = incentive_summary.merge(incentive_value, on="Incentive Status", how="left")
+
+    high_cps = cps_df[cps_df["CAC"] > 2200].copy()
+    needs_improvement = cps_df[(cps_df["CAC"] >= 1800) & (cps_df["CAC"] <= 2200)].copy()
+    no_incentive = cps_df[cps_df["Variable_Payout"] <= 0].copy()
+    below_install_gate = cps_df[cps_df["Installs"] < 8].copy()
+
+    below_total_gate = cps_df[
+        ((cps_df["SCHEME"].astype(str).str.upper() == "LFHV") & (cps_df["Total_Activations"] < 12)) |
+        ((cps_df["SCHEME"].astype(str).str.upper() == "HFLV") & (cps_df["Total_Activations"] < 13))
+    ].copy()
+
+    low_yield = cps_df[
+        (
+            (
+                (cps_df["SCHEME"].astype(str).str.upper() == "LFHV") &
+                (cps_df["Installs"] >= 8) &
+                (cps_df["Total_Activations"] >= 12)
+            ) |
+            (
+                (cps_df["SCHEME"].astype(str).str.upper() == "HFLV") &
+                (cps_df["Installs"] >= 8) &
+                (cps_df["Total_Activations"] >= 13)
+            )
+        ) &
+        (cps_df["Payout_per_Activation"] < 400)
+    ].copy()
+
+    leakage_summary = pd.DataFrame({
+        "Leakage Reason": [
+            "Below Install Gate",
+            "Below Total Activation Gate",
+            "Low Yield Plan Mix",
+            "No Incentive"
+        ],
+        "Employees": [
+            below_install_gate["EMP Code"].nunique(),
+            below_total_gate["EMP Code"].nunique(),
+            low_yield["EMP Code"].nunique(),
+            no_incentive["EMP Code"].nunique()
+        ],
+        "Total Activations": [
+            below_install_gate["Total_Activations"].sum() if not below_install_gate.empty else 0,
+            below_total_gate["Total_Activations"].sum() if not below_total_gate.empty else 0,
+            low_yield["Total_Activations"].sum() if not low_yield.empty else 0,
+            no_incentive["Total_Activations"].sum() if not no_incentive.empty else 0
+        ]
+    })
+
+    return {
+        "city_cps": city_cps,
+        "category_summary": category_summary,
+        "incentive_summary": incentive_summary,
+        "high_cps": high_cps,
+        "needs_improvement": needs_improvement,
+        "no_incentive": no_incentive,
+        "below_install_gate": below_install_gate,
+        "below_total_gate": below_total_gate,
+        "low_yield": low_yield,
+        "leakage_summary": leakage_summary
+    }
 
 # --------------------------------------------------
 # HTML Helpers
@@ -1110,6 +1284,24 @@ def color_text_html(text):
     elif "Exceptional" in text or "On Track" in text or "Meeting" in text:
         return f'<span style="color:green;font-weight:bold;">{text}</span>'
     return text
+    
+def format_cps_summary_for_mail(df):
+    if df.empty:
+        return df
+    out = df.copy()
+    for col in ["Fixed_CTC", "Variable_Payout", "Pending_Payout", "Total_Payout", "CAC", "Payout_per_Activation"]:
+        if col in out.columns:
+            out[col] = out[col].apply(format_inr_0)
+    return out
+
+def format_simple_cps_mail_df(df):
+    if df.empty:
+        return df
+    out = df.copy()
+    for col in out.columns:
+        if col in ["Total_Payout", "CAC", "Avg CPS", "Lost Opportunity", "Payout_per_Activation"]:
+            out[col] = out[col].apply(format_inr_0)
+    return out
 
 # --------------------------------------------------
 # KPI Summary HTML
@@ -1165,7 +1357,7 @@ def build_kpi_html(month_comparison, current_label="Current Period", previous_la
 # --------------------------------------------------
 # Email Body Builder
 # --------------------------------------------------
-def build_email_body(user_row, report_pack, mode):
+def build_email_body(user_row, report_pack, cps_pack, mode):
     username = user_row["UserID"]
     role = user_row["Role"]
     period_label = report_pack["period_label"]
@@ -1175,6 +1367,15 @@ def build_email_body(user_row, report_pack, mode):
     node_summary = format_node_summary_for_mail(report_pack["node_summary"])
     plan_summary = format_plan_summary_for_mail(report_pack["plan_summary"])
     ageing_summary = report_pack["ageing_summary"]
+    city_cps = format_simple_cps_mail_df(cps_pack["city_cps"])
+    category_summary = format_simple_cps_mail_df(cps_pack["category_summary"])
+    incentive_summary = format_simple_cps_mail_df(cps_pack["incentive_summary"])
+    high_cps = format_cps_summary_for_mail(cps_pack["high_cps"])
+    no_incentive = format_cps_summary_for_mail(cps_pack["no_incentive"])
+    below_install_gate = format_cps_summary_for_mail(cps_pack["below_install_gate"])
+    below_total_gate = format_cps_summary_for_mail(cps_pack["below_total_gate"])
+    low_yield = format_cps_summary_for_mail(cps_pack["low_yield"])
+    leakage_summary = format_simple_cps_mail_df(cps_pack["leakage_summary"])
 
     kpi_html = build_kpi_html(
         report_pack["month_comparison"],
@@ -1221,6 +1422,48 @@ def build_email_body(user_row, report_pack, mode):
 
         <h3 style="color:#c00000;">🚩 Underperformer Detail</h3>
         {df_to_html(underperformers, max_rows=20)}
+        
+        <h3 style="color:#c00000;">💸 City-wise CPS Summary</h3>
+        {df_to_html(city_cps, max_rows=20)}
+
+        <h3 style="color:#c00000;">📌 CPS Category Summary</h3>
+        {df_to_html(category_summary, max_rows=10)}
+
+        <h3 style="color:#c00000;">🎯 Incentive Qualification Summary</h3>
+        {df_to_html(incentive_summary, max_rows=10)}
+
+        <h3 style="color:#c00000;">⚠️ Alarming CPS Executives (&gt; 2200)</h3>
+        {df_to_html(high_cps[[
+            c for c in ["EMP Code","Name","City","MonthYear","Installs","Winbacks","Total_Activations","SCHEME","Variable_Payout","Total_Payout","CAC","Recommendation"]
+            if c in high_cps.columns
+        ]], max_rows=15)}
+
+        <h3 style="color:#c00000;">🚫 Executives Not Earning Incentive</h3>
+        {df_to_html(no_incentive[[
+            c for c in ["EMP Code","Name","City","MonthYear","Installs","Winbacks","Total_Activations","SCHEME","CAC","Recommendation"]
+            if c in no_incentive.columns
+        ]], max_rows=15)}
+
+        <h3 style="color:#c00000;">📉 Incentive Leakage Summary</h3>
+        {df_to_html(leakage_summary, max_rows=10)}
+
+        <h3 style="color:#c00000;">🔻 Below Install Gate</h3>
+        {df_to_html(below_install_gate[[
+            c for c in ["EMP Code","Name","City","MonthYear","Installs","Winbacks","Total_Activations","Recommendation"]
+            if c in below_install_gate.columns
+        ]], max_rows=15)}
+
+        <h3 style="color:#c00000;">🔻 Below Total Activation Gate</h3>
+        {df_to_html(below_total_gate[[
+            c for c in ["EMP Code","Name","City","MonthYear","Installs","Winbacks","Total_Activations","Recommendation"]
+            if c in below_total_gate.columns
+        ]], max_rows=15)}
+
+        <h3 style="color:#c00000;">📊 Low Yield Plan Mix</h3>
+        {df_to_html(low_yield[[
+            c for c in ["EMP Code","Name","City","MonthYear","Installs","Winbacks","Total_Activations","Variable_Payout","Payout_per_Activation","CAC","Recommendation"]
+            if c in low_yield.columns
+        ]], max_rows=15)}
 
         <p><b style="color:#c00000;">Recommended Leadership Actions</b></p>
         <ul style="font-size:12px;">
@@ -1246,7 +1489,7 @@ def build_email_subject(user_row, report_pack, mode):
 
     scope = "ALL" if "manager" in str(role).strip().lower() else region_city
 
-    return f"📊 {mode.title()} Sales Performance Review | {role} | {scope} | {period_label}"
+    return f"📊 {mode.title()} Sales Performance + CPS Review | {role} | {scope} | {period_label}"
 
 # --------------------------------------------------
 # SMTP Send Function
@@ -1255,7 +1498,7 @@ def build_email_subject(user_row, report_pack, mode):
 # --------------------------------------------------
 # Attachment Builder
 # --------------------------------------------------
-def create_report_attachment(user_row, report_pack, mode):
+def create_report_attachment(user_row, report_pack, cps_pack, mode):
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     temp_path = temp_file.name
     temp_file.close()
@@ -1265,6 +1508,15 @@ def create_report_attachment(user_row, report_pack, mode):
     node_summary = format_node_summary_for_mail(report_pack["node_summary"])
     plan_summary = format_plan_summary_for_mail(report_pack["plan_summary"])
     underperformers = format_underperformers_for_mail(report_pack["underperformers"])
+    city_cps = cps_pack["city_cps"].copy()
+    category_summary = cps_pack["category_summary"].copy()
+    incentive_summary = cps_pack["incentive_summary"].copy()
+    high_cps = cps_pack["high_cps"].copy()
+    no_incentive = cps_pack["no_incentive"].copy()
+    below_install_gate = cps_pack["below_install_gate"].copy()
+    below_total_gate = cps_pack["below_total_gate"].copy()
+    low_yield = cps_pack["low_yield"].copy()
+    leakage_summary = cps_pack["leakage_summary"].copy()
 
     with pd.ExcelWriter(temp_path, engine="openpyxl") as writer:
         exec_summary.to_excel(writer, index=False, sheet_name="Executive Summary")
@@ -1272,7 +1524,15 @@ def create_report_attachment(user_row, report_pack, mode):
         node_summary.to_excel(writer, index=False, sheet_name="Node Summary")
         plan_summary.to_excel(writer, index=False, sheet_name="Plan Summary")
         underperformers.to_excel(writer, index=False, sheet_name="Underperformers")
-
+        city_cps.to_excel(writer, index=False, sheet_name="CPS City Summary")
+        category_summary.to_excel(writer, index=False, sheet_name="CPS Category Summary")
+        incentive_summary.to_excel(writer, index=False, sheet_name="Incentive Qualification")
+        high_cps.to_excel(writer, index=False, sheet_name="High CPS")
+        no_incentive.to_excel(writer, index=False, sheet_name="No Incentive")
+        below_install_gate.to_excel(writer, index=False, sheet_name="Below Install Gate")
+        below_total_gate.to_excel(writer, index=False, sheet_name="Below Total Gate")
+        low_yield.to_excel(writer, index=False, sheet_name="Low Yield Mix")
+        leakage_summary.to_excel(writer, index=False, sheet_name="Leakage Summary")
     filename = f"{mode}_{user_row['Username']}_{report_pack['period_label'].replace(' ', '_').replace(':', '').replace('/', '-')}.xlsx"
     return temp_path, filename
 
@@ -1328,7 +1588,8 @@ def send_report_to_user(user_row, perf_df, action_df, mode="weekly"):
 
     scoped_perf_df = apply_scope_filter(perf_df, role=role, region_city=region_city)
     scoped_action_df = apply_scope_filter(action_df, role=role, region_city=region_city)
-
+    scoped_cps_df = apply_cps_scope_filter(monthly_cac, role=role, region_city=region_city).copy()
+     
     periods_perf = get_reporting_periods(scoped_perf_df)
     periods_action = get_reporting_periods(scoped_action_df)
 
@@ -1339,11 +1600,25 @@ def send_report_to_user(user_row, perf_df, action_df, mode="weekly"):
         periods_perf=periods_perf,
         periods_action=periods_action
     )
+    
+    # Filter CPS to relevant month
+    if not scoped_cps_df.empty and "MonthYear" in scoped_cps_df.columns:
+        if mode == "monthly" and periods_perf["latest_month_start"] is not None:
+            cps_month = periods_perf["latest_month_start"].strftime("%b-%Y")
+            scoped_cps_df = scoped_cps_df[scoped_cps_df["MonthYear"] == cps_month].copy()
+        elif mode == "fortnightly" and periods_perf["latest_month_start"] is not None:
+            cps_month = periods_perf["latest_month_start"].strftime("%b-%Y")
+            scoped_cps_df = scoped_cps_df[scoped_cps_df["MonthYear"] == cps_month].copy()
+        elif mode == "weekly" and periods_perf["latest_month_start"] is not None:
+            cps_month = periods_perf["latest_month_start"].strftime("%b-%Y")
+            scoped_cps_df = scoped_cps_df[scoped_cps_df["MonthYear"] == cps_month].copy()
 
+    cps_pack = build_cps_mail_pack(scoped_cps_df)
+    
     subject = build_email_subject(user_row, report_pack, mode)
-    html_body = build_email_body(user_row, report_pack, mode)
+    html_body = build_email_body(user_row, report_pack, cps_pack, mode)
 
-    attachment_path, attachment_name = create_report_attachment(user_row, report_pack, mode)
+    attachment_path, attachment_name = create_report_attachment(user_row, report_pack, cps_pack, mode)
 
     print(f"Sending {mode} mail to {user_row['Username']} -> {email}")
     send_email(
