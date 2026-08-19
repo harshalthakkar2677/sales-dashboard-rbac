@@ -1,3 +1,4 @@
+from sales_cac_utils import calculate_payouts
 import os
 import pandas as pd
 import streamlit as st
@@ -102,6 +103,7 @@ DATA_FILE = "New Registration Report.csv"
 WINBACK_FILE = "New Winback Report.csv"
 ACCESS_FILE = "Access Master.xlsx"
 LOGO_FILE = "company_logo.png"
+CTC_FILE = "TSE-ACTIVE-CTC-31 Jul 2026.csv"
 
 # --------------------------------------------------
 # Cloud-safe startup file validation
@@ -161,6 +163,65 @@ def format_value(num):
         return f"{num/100_000:.1f} L"
     else:
         return f"{round(num):,}"
+        
+def highlight_cps_category(val):
+    if pd.isna(val):
+        return ""
+    val = str(val)
+    if val == "Good":
+        return "background-color: #d4edda; color: #155724; font-weight: bold;"
+    elif val == "Needs Improvement":
+        return "background-color: #fff3cd; color: #856404; font-weight: bold;"
+    elif val == "Alarming":
+        return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
+    return ""
+    
+def style_cps_table(df):
+    styled = df.style
+    if "CPS Category" in df.columns:
+        try:
+            styled = styled.map(highlight_cps_category, subset=["CPS Category"])
+        except:
+            styled = styled.applymap(highlight_cps_category, subset=["CPS Category"])
+    fmt_cols = {}
+    for col in ["Fixed_CTC", "Variable_Payout", "Pending_Payout", "Total_Payout", "CAC", "Avg CPS", "Lost Opportunity", "Payout_per_Activation"]:
+        if col in df.columns:
+            fmt_cols[col] = "{:,.0f}"
+    return styled.format(fmt_cols)
+    
+def style_audit_table(df):
+    styled = df.style
+    fmt_cols = {}
+    for col in ["Plan Value", "ROW_PAYOUT", "ROW_PENDING"]:
+        if col in df.columns:
+            fmt_cols[col] = "{:,.0f}"
+    return styled.format(fmt_cols)
+    
+def add_total_row(df, label_col=None, label="Total"):
+    out = df.copy()
+    numeric_cols = out.select_dtypes(include=["number"]).columns.tolist()
+    total_dict = {}
+    for col in out.columns:
+        total_dict[col] = out[col].sum() if col in numeric_cols else ""
+    if label_col and label_col in out.columns:
+        total_dict[label_col] = label
+    return pd.concat([out, pd.DataFrame([total_dict])], ignore_index=True)
+    
+def recommendation_from_row(row):
+    installs = row.get("Installs", 0)
+    total = row.get("Total_Activations", 0)
+    scheme = str(row.get("SCHEME", "")).upper()
+    variable = row.get("Variable_Payout", 0)
+
+    if installs < 8:
+        return "Increase new installs to minimum 8."
+    if scheme == "LFHV" and total < 12:
+        return "Increase total activations to at least 12."
+    if scheme == "HFLV" and total < 13:
+        return "Increase total activations to at least 13."
+    if variable <= 0:
+        return "Improve plan mix toward higher-yield / flat payout eligible plans."
+    return "Maintain run-rate and improve plan quality."
 
 def format_currency_compact(num):
     if pd.isna(num):
@@ -728,6 +789,27 @@ if not st.session_state["authenticated"]:
 
 df, wb = load_data(file_mtime)
 
+monthly_cac, detail_rows = calculate_payouts(
+    sales_file=DATA_FILE,
+    wb_file=WINBACK_FILE,
+    ctc_file=CTC_FILE
+)
+
+monthly_cac["City"] = monthly_cac["City"].astype(str).str.strip()
+monthly_cac["MonthYear"] = monthly_cac["MonthYear"].astype(str).str.strip()
+monthly_cac["Name"] = monthly_cac["Name"].astype(str).str.strip()
+
+detail_rows["City"] = detail_rows["City"].astype(str).str.strip()
+detail_rows["MonthYear"] = detail_rows["MonthYear"].astype(str).str.strip()
+detail_rows["Name"] = detail_rows["Name"].astype(str).str.strip()
+
+monthly_cac["CPS Category"] = monthly_cac["CAC"].apply(
+    lambda x: "Good" if x < 1800 else ("Needs Improvement" if x <= 2200 else "Alarming")
+)
+monthly_cac["Incentive Status"] = monthly_cac["Variable_Payout"].apply(
+    lambda x: "No Incentive" if pd.isna(x) or x <= 0 else "Incentive Earned"
+)
+
 # --------------------------------------------------
 # Contribution Mode Filter
 # --------------------------------------------------
@@ -873,11 +955,13 @@ if month != "All" and "MonthYear" in filtered_df.columns:
 # --------------------------------------------------
 # Tabs
 # --------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Operations & Executive",
     "Customer Profiling",
     "CEO & Sales Head",
     "Actionable Insights"
+    "CPS / CAC",
+    "Incentive Leakage Analysis"
 ])
 ## Part 2 of 4
 
@@ -1527,9 +1611,9 @@ with tab3:
 
     period_months = source_df["MonthYear"].nunique() if "MonthYear" in source_df.columns else 0
 
-    total_count = filtered_df["ACCOUNT NO"].nunique() if "ACCOUNT NO" in filtered_df.columns else 0
+    total_count = filtered_df["ACCOUNT NO"].count() if "ACCOUNT NO" in filtered_df.columns else 0
     total_value = filtered_df["Plan Value"].sum() if "Plan Value" in filtered_df.columns else 0
-    avg_count = filtered_df.groupby("MonthYear")["ACCOUNT NO"].nunique().mean() if "MonthYear" in filtered_df.columns and not filtered_df.empty else 0
+    avg_count = filtered_df.groupby("MonthYear")["ACCOUNT NO"].count().mean() if "MonthYear" in filtered_df.columns and not filtered_df.empty else 0
     avg_value = filtered_df.groupby("MonthYear")["Plan Value"].sum().mean() if "MonthYear" in filtered_df.columns and not filtered_df.empty else 0
 
     avg_count = 0 if pd.isna(avg_count) else round(avg_count, 0)
@@ -1995,3 +2079,350 @@ with tab4:
         else:
             st.success("No active Sales executives are currently below expectations for selected filters.")
 
+# ==================================================
+# TAB 5: CPS / CAC
+# ==================================================
+with tab5:
+    st.header("Cost Per Sale (CPS / CAC)")
+
+    c1, c2, c3 = st.columns(3)
+
+    cps_city_options = ["All"] + sorted(monthly_cac["City"].dropna().astype(str).str.strip().unique().tolist())
+    cps_month_options = ["All"] + (
+        monthly_cac.assign(
+            MonthSort=pd.to_datetime(monthly_cac["MonthYear"], format="%b-%Y", errors="coerce")
+        )
+        .sort_values("MonthSort")["MonthYear"]
+        .dropna()
+        .drop_duplicates()
+        .tolist()
+    )
+    cps_exec_options = ["All"] + sorted(monthly_cac["Name"].dropna().astype(str).str.strip().unique().tolist())
+
+    with c1:
+        selected_cps_city = st.selectbox("CPS City", cps_city_options, key="cps_city_filter_team")
+    with c2:
+        selected_cps_month = st.selectbox("CPS Month", cps_month_options, key="cps_month_filter_team")
+    with c3:
+        selected_cps_exec = st.selectbox("CPS Executive", cps_exec_options, key="cps_exec_filter_team")
+
+    cps_df = monthly_cac.copy()
+
+    # Role restriction for regional lead
+    if access_role == "Regional Lead":
+        allowed_cities = [x.strip() for x in access_region_city.split(",") if x.strip()]
+        cps_df = cps_df[cps_df["City"].isin(allowed_cities)]
+
+    if selected_cps_city != "All":
+        cps_df = cps_df[cps_df["City"] == selected_cps_city]
+
+    if selected_cps_month != "All":
+        cps_df = cps_df[cps_df["MonthYear"] == selected_cps_month]
+
+    if selected_cps_exec != "All":
+        cps_df = cps_df[cps_df["Name"] == selected_cps_exec]
+
+    if cps_df.empty:
+        st.info("No CPS data available for selected filters.")
+    else:
+        total_execs = cps_df["EMP Code"].nunique()
+        total_acts = cps_df["Total_Activations"].sum()
+        total_cost = cps_df["Total_Payout"].sum()
+        avg_cac = round(total_cost / total_acts, 0) if total_acts else 0
+        no_incentive_execs = cps_df[cps_df["Variable_Payout"] <= 0]["EMP Code"].nunique()
+
+        if selected_cps_city == "All" and selected_cps_month == "All":
+            total_cost_display = f"₹{total_cost / 1_000_000:.2f} Mn"
+        else:
+            total_cost_display = f"₹{total_cost:,.0f}"
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.metric("Executives", int(total_execs))
+        k2.metric("Total Activations", int(total_acts))
+        k3.metric("Total Cost", total_cost_display)
+        k4.metric("Average CPS / CAC", f"₹{avg_cac:,.0f}")
+        k5.metric("Executives with No Incentive", int(no_incentive_execs))
+
+        st.subheader("CPS Category Summary")
+        category_emp = cps_df[["EMP Code", "CPS Category"]].drop_duplicates()
+
+        category_summary = (
+            category_emp.groupby("CPS Category", as_index=False)
+            .agg(Employees=("EMP Code", "nunique"))
+        )
+
+        category_value = (
+            cps_df.groupby("CPS Category", as_index=False)
+            .agg(
+                Total_Activations=("Total_Activations", "sum"),
+                Total_Payout=("Total_Payout", "sum")
+            )
+        )
+
+        category_summary = category_summary.merge(category_value, on="CPS Category", how="left")
+        category_summary["Avg CPS"] = (
+            category_summary["Total_Payout"] / category_summary["Total_Activations"].replace(0, pd.NA)
+        ).fillna(0).round(0)
+
+        st.dataframe(style_cps_table(category_summary), use_container_width=True)
+
+        st.subheader("Incentive Qualification Summary")
+        incentive_emp = cps_df[["EMP Code", "Incentive Status"]].drop_duplicates()
+
+        incentive_summary = (
+            incentive_emp.groupby("Incentive Status", as_index=False)
+            .agg(Employees=("EMP Code", "nunique"))
+        )
+
+        incentive_value = (
+            cps_df.groupby("Incentive Status", as_index=False)
+            .agg(
+                Total_Activations=("Total_Activations", "sum"),
+                Total_Payout=("Total_Payout", "sum")
+            )
+        )
+
+        incentive_summary = incentive_summary.merge(incentive_value, on="Incentive Status", how="left")
+        st.dataframe(incentive_summary, use_container_width=True)
+
+        st.subheader("Month-on-Month CPS / CAC Trend")
+        trend = cps_df.groupby("MonthYear", as_index=False).agg(
+            Total_Payout=("Total_Payout", "sum"),
+            Total_Activations=("Total_Activations", "sum")
+        )
+        trend["MonthSort"] = pd.to_datetime(trend["MonthYear"], format="%b-%Y", errors="coerce")
+        trend = trend.sort_values("MonthSort")
+        trend["CAC"] = (
+            trend["Total_Payout"] / trend["Total_Activations"].replace(0, pd.NA)
+        ).fillna(0).round(0)
+
+        if not trend.empty:
+            fig_trend = px.line(
+                trend,
+                x="MonthYear",
+                y="CAC",
+                markers=True,
+                title="Month-on-Month CPS / CAC"
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
+
+        st.subheader("Employee-wise CPS Summary")
+        cps_cols = [
+            "EMP Code", "Name", "City", "MonthYear",
+            "Installs", "Winbacks", "Total_Activations",
+            "SCHEME", "Fixed_CTC", "Variable_Payout",
+            "Pending_Payout", "Total_Payout", "CAC",
+            "CPS Category", "Incentive Status"
+        ]
+        cps_cols = [c for c in cps_cols if c in cps_df.columns]
+
+        cps_table = add_total_row(cps_df[cps_cols].copy(), label_col="Name")
+        st.dataframe(style_cps_table(cps_table), use_container_width=True)
+
+        with st.expander("Activation-level CPS Audit Detail"):
+            detail_view = detail_rows.copy()
+
+            if access_role == "Regional Lead":
+                allowed_cities = [x.strip() for x in access_region_city.split(",") if x.strip()]
+                detail_view = detail_view[detail_view["City"].isin(allowed_cities)]
+
+            if selected_cps_city != "All":
+                detail_view = detail_view[detail_view["City"] == selected_cps_city]
+
+            if selected_cps_month != "All":
+                detail_view = detail_view[detail_view["MonthYear"] == selected_cps_month]
+
+            if selected_cps_exec != "All":
+                detail_view = detail_view[detail_view["Name"] == selected_cps_exec]
+
+            detail_cols = [
+                "EMP Code", "Name", "MonthYear", "Source", "City",
+                "Plan Value", "SPEED (Mbps)", "VALIDITY In Months",
+                "Installs", "Winbacks", "Total Activations",
+                "SCHEME", "ROW_PAYOUT", "ROW_PENDING", "ROW_REMARK", "DEBUG_MATCH"
+            ]
+            detail_cols = [c for c in detail_cols if c in detail_view.columns]
+
+            st.dataframe(style_audit_table(detail_view[detail_cols]), use_container_width=True)
+
+            st.download_button(
+                "📥 Download CPS Audit Detail",
+                detail_view[detail_cols].to_csv(index=False).encode("utf-8"),
+                file_name="team_sales_dashboard_cps_audit_detail.csv",
+                mime="text/csv"
+            )
+# ==================================================
+# TAB 6: Incentive Leakage Analysis
+# ==================================================
+with tab6:
+    st.header("Incentive Leakage Analysis")
+
+    c1, c2, c3 = st.columns(3)
+
+    leak_city_options = ["All"] + sorted(monthly_cac["City"].dropna().astype(str).str.strip().unique().tolist())
+    leak_month_options = ["All"] + (
+        monthly_cac.assign(
+            MonthSort=pd.to_datetime(monthly_cac["MonthYear"], format="%b-%Y", errors="coerce")
+        )
+        .sort_values("MonthSort")["MonthYear"]
+        .dropna()
+        .drop_duplicates()
+        .tolist()
+    )
+    leak_exec_options = ["All"] + sorted(monthly_cac["Name"].dropna().astype(str).str.strip().unique().tolist())
+
+    with c1:
+        selected_leak_city = st.selectbox("Leakage City", leak_city_options, key="leak_city_filter_team")
+    with c2:
+        selected_leak_month = st.selectbox("Leakage Month", leak_month_options, key="leak_month_filter_team")
+    with c3:
+        selected_leak_exec = st.selectbox("Leakage Executive", leak_exec_options, key="leak_exec_filter_team")
+
+    yield_threshold = st.slider(
+        "Low-yield payout per activation threshold",
+        min_value=100,
+        max_value=1000,
+        value=400,
+        step=50,
+        key="yield_threshold_team"
+    )
+
+    leak_df = monthly_cac.copy()
+
+    if access_role == "Regional Lead":
+        allowed_cities = [x.strip() for x in access_region_city.split(",") if x.strip()]
+        leak_df = leak_df[leak_df["City"].isin(allowed_cities)]
+
+    if selected_leak_city != "All":
+        leak_df = leak_df[leak_df["City"] == selected_leak_city]
+
+    if selected_leak_month != "All":
+        leak_df = leak_df[leak_df["MonthYear"] == selected_leak_month]
+
+    if selected_leak_exec != "All":
+        leak_df = leak_df[leak_df["Name"] == selected_leak_exec]
+
+    if leak_df.empty:
+        st.info("No leakage data available for selected filters.")
+    else:
+        leak_df["Payout_per_Activation"] = (
+            leak_df["Variable_Payout"] / leak_df["Total_Activations"].replace(0, pd.NA)
+        ).fillna(0).round(0)
+
+        leak_df["Recommendation"] = leak_df.apply(recommendation_from_row, axis=1)
+
+        below_install = leak_df[leak_df["Installs"] < 8].copy()
+
+        below_total = leak_df[
+            ((leak_df["SCHEME"].astype(str).str.upper() == "LFHV") & (leak_df["Total_Activations"] < 12)) |
+            ((leak_df["SCHEME"].astype(str).str.upper() == "HFLV") & (leak_df["Total_Activations"] < 13))
+        ].copy()
+
+        low_yield = leak_df[
+            (
+                (
+                    (leak_df["SCHEME"].astype(str).str.upper() == "LFHV") &
+                    (leak_df["Installs"] >= 8) &
+                    (leak_df["Total_Activations"] >= 12)
+                ) |
+                (
+                    (leak_df["SCHEME"].astype(str).str.upper() == "HFLV") &
+                    (leak_df["Installs"] >= 8) &
+                    (leak_df["Total_Activations"] >= 13)
+                )
+            ) &
+            (leak_df["Payout_per_Activation"] < yield_threshold)
+        ].copy()
+
+        total_execs = leak_df["EMP Code"].nunique()
+        below_install_count = below_install["EMP Code"].nunique()
+        below_total_count = below_total["EMP Code"].nunique()
+        low_yield_count = low_yield["EMP Code"].nunique()
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Executives in Scope", int(total_execs))
+        k2.metric("Below Install Gate", int(below_install_count))
+        k3.metric("Below Total Activation Gate", int(below_total_count))
+        k4.metric("Low Yield Plan Mix", int(low_yield_count))
+
+        st.subheader("Executives Below Install Gate")
+        st.caption(f"Executives identified: {below_install_count}")
+        if not below_install.empty:
+            cols = [
+                "EMP Code", "Name", "City", "MonthYear", "SCHEME",
+                "Installs", "Winbacks", "Total_Activations", "Recommendation"
+            ]
+            cols = [c for c in cols if c in below_install.columns]
+            st.dataframe(below_install[cols], use_container_width=True)
+        else:
+            st.success("No executives below install gate.")
+
+        st.subheader("Executives Below Total Activation Gate")
+        st.caption(f"Executives identified: {below_total_count}")
+        if not below_total.empty:
+            cols = [
+                "EMP Code", "Name", "City", "MonthYear", "SCHEME",
+                "Installs", "Winbacks", "Total_Activations", "Recommendation"
+            ]
+            cols = [c for c in cols if c in below_total.columns]
+            st.dataframe(below_total[cols], use_container_width=True)
+        else:
+            st.info("No executives below total activation gate for the selected filters.")
+
+        st.subheader("Executives Selling Low-Yield Plan Mix")
+        st.caption(f"Executives identified: {low_yield_count}")
+        if not low_yield.empty:
+            low_yield["Recommendation"] = low_yield.apply(
+                lambda r: f"Improve plan mix in {r['City']} by pushing flat/slab favorable higher-yield plans.",
+                axis=1
+            )
+            cols = [
+                "EMP Code", "Name", "City", "MonthYear", "SCHEME",
+                "Installs", "Winbacks", "Total_Activations",
+                "Variable_Payout", "Payout_per_Activation", "CAC", "Recommendation"
+            ]
+            cols = [c for c in cols if c in low_yield.columns]
+            st.dataframe(style_cps_table(low_yield[cols]), use_container_width=True)
+        else:
+            st.info("No low-yield plan mix cases found for the selected filters under current threshold.")
+
+        st.subheader("Leakage Reason Summary")
+        reason_summary = pd.DataFrame({
+            "Leakage Reason": ["Below Install Gate", "Below Total Activation Gate", "Low Yield Plan Mix"],
+            "Employees": [below_install_count, below_total_count, low_yield_count],
+            "Total_Activations": [
+                below_install["Total_Activations"].sum() if not below_install.empty else 0,
+                below_total["Total_Activations"].sum() if not below_total.empty else 0,
+                low_yield["Total_Activations"].sum() if not low_yield.empty else 0
+            ]
+        })
+        st.dataframe(reason_summary, use_container_width=True)
+
+        st.subheader("City-wise Lost Incentive Opportunity")
+        no_inc_city = (
+            leak_df[leak_df["Variable_Payout"] <= 0]
+            .groupby("City", as_index=False)
+            .agg(
+                No_Incentive_Execs=("EMP Code", "nunique"),
+                Lost_Opportunity=("Fixed_CTC", "sum")
+            )
+        )
+
+        city_summary = leak_df.groupby("City", as_index=False).agg(
+            Executives=("EMP Code", "nunique"),
+            Total_Activations=("Total_Activations", "sum")
+        )
+
+        city_summary = city_summary.merge(no_inc_city, on="City", how="left")
+        city_summary["No_Incentive_Execs"] = city_summary["No_Incentive_Execs"].fillna(0)
+        city_summary["Lost_Opportunity"] = city_summary["Lost_Opportunity"].fillna(0)
+        city_summary = city_summary.rename(columns={"Lost_Opportunity": "Lost Opportunity"})
+
+        st.dataframe(style_cps_table(city_summary), use_container_width=True)
+
+        st.download_button(
+            "📥 Download Leakage Analysis",
+            leak_df.to_csv(index=False).encode("utf-8"),
+            file_name="team_incentive_leakage_analysis.csv",
+            mime="text/csv"
+        )
